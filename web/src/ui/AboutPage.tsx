@@ -16,38 +16,24 @@ export default function AboutPage() {
   return (
     <div className="page about">
       <h1>關於本站</h1>
-
+      <p>
+        品三國，識粵語。用粵語地區膾炙人口的張悅楷《三國演義》評書，亦即楷叔講古仔，品味粵語之古雅又生鬼，又在經典中學習當代的粵拼Jyutping國際音標，豈不樂哉。
+      </p>
+      <p>
+        本站所有內容，只用於中華文化推廣，遵循開放版權約定，如有內容問題，請聯繫 <a href="mailto:gzfls-cantonese@outlook.com">gzfls-cantonese@outlook.com</a>
+      </p>
       <section>
-        <h2>語料來源</h2>
+        <h2>語料數據集來源</h2>
         <p>
-          本站粵語評書音頻與繁体脚本來自 Hugging Face 上的 CanCLID <code>zoengjyutgaai</code>
-          《三國演義》粵語評書數據集，共 157 集、約 3.9 萬段。
+          本站粵語評書音頻與繁體脚本，來自 huggingface 社區 <code>CanCLID/zoengjyutgaai</code>  “張悅楷講古語音-三國演義子數據集”，共 157 集、3.92 萬段，數據集許可證： 
         </p>
-        <p>
-          數據集主頁：
-          <a href={source} target="_blank" rel="noreferrer noopener">
-            {source}
-          </a>
-        </p>
-      </section>
-
-      <section>
-        <h2>授權許可</h2>
         <p className="license-badge">
           <strong>{license}</strong> · Public Domain Dedication
         </p>
         <p>
-          該數據集以 {license} 授權釋出，可自由使用。許可證全文：
-          <a href={licenseUrl} target="_blank" rel="noreferrer noopener">
-            {licenseUrl}
-          </a>
-        </p>
-      </section>
-
-      <section>
-        <h2>插圖版權</h2>
-        <p>
-          各集《三國演義》小人書插圖的來源與授權尚待確認，在此之前一律使用佔位圖，本站不展示任何未授權圖片。
+          <a href={source} target="_blank" rel="noreferrer noopener">數據集主頁</a>
+          {'   ·   '}
+          <a href={licenseUrl} target="_blank" rel="noreferrer noopener">{license} 許可證全文</a>
         </p>
       </section>
     </div>
