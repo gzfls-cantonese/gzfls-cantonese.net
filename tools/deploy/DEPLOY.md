@@ -97,6 +97,12 @@ bash tools/deploy/deploy.sh
 >   --endpoint "${OSS_ENDPOINT}" --region cn-hongkong --cache-control "max-age=31536000,immutable"
 > ```
 
+> **只刷新数据索引（不重传音频）**：重新生成 `dist-assets/` 后（例如更新集标题/篇名），`manifest.json` 与 `episodes/*.json` 需要同步到稳定前缀；音频内容稳定、保持 immutable 长缓存，不必重传。执行：
+> ```bash
+> bash tools/deploy/deploy-data-index.sh
+> ```
+> 该脚本只上传 `manifest.json` 与 `episodes/*.json`，并以 `Cache-Control:max-age=300` 覆盖对象上旧的 immutable 头。**注意**：已被旧 immutable 缓存污染的客户端不会主动重请求同一 URL；前端对索引 JSON 的请求带 `?v=<部署版本>` 查询参数（构建时由 `VITE_DEPLOY_VERSION` 注入，见 `web/src/config.ts`），因此刷新数据后需**重新执行 `deploy.sh` 发布带新版本号的站点**，客户端才会以新 URL 取到新索引。两者都完成后，标题/篇名等变更才对所有客户端可见。
+
 > 历史遗留：早期部署在 `sanguo/v<timestamp>/{site,data}/` 下留有副本，新脚本不再写入这些路径；确认无用后可手动清理以省存储（非必需，谨慎删除）。
 
 ---

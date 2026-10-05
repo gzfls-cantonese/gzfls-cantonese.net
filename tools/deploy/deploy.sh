@@ -53,6 +53,9 @@ echo "==> building web"
 # would resolve to a non-existent bucket-root /data). Override before running to
 # point at a different data origin.
 export VITE_ASSET_BASE="${VITE_ASSET_BASE:-/${OSS_PREFIX}/data}"
+# Stamped into the bundle so index JSON URLs carry ?v=<version> and bypass
+# stale immutable caches after a data refresh (see web/src/config.ts).
+export VITE_DEPLOY_VERSION="${VITE_DEPLOY_VERSION:-${VERSION}}"
 (cd "${ROOT}/web" && npm ci && npm run build)
 
 echo "==> uploading site -> ${SITE_DEST}/ (bucket root)"
@@ -69,11 +72,11 @@ ossutil cp -r -u "${ROOT}/web/dist/" "${SITE_DEST}/" \
 #  "${REGION_ARGS[@]}" \
 #  "${META_DATA[@]}"
 
-echo "==> publishing version marker"
-echo "${VERSION}" > "${ROOT}/.deploy-version"
-ossutil cp "${ROOT}/.deploy-version" "oss://${OSS_BUCKET}/${OSS_PREFIX}/CURRENT" \
-  --endpoint "${OSS_ENDPOINT}" \
-  "${REGION_ARGS[@]}"
+#echo "==> publishing version marker"
+#echo "${VERSION}" > "${ROOT}/.deploy-version"
+#ossutil cp "${ROOT}/.deploy-version" "oss://${OSS_BUCKET}/${OSS_PREFIX}/CURRENT" \
+#  --endpoint "${OSS_ENDPOINT}" \
+#  "${REGION_ARGS[@]}"
 
 if [[ -n "${CDN_DOMAIN:-}" ]]; then
   echo "==> refreshing CDN for ${CDN_DOMAIN}"
