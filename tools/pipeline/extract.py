@@ -47,6 +47,8 @@ def parse_args():
                    help="directory containing the parquet files")
     p.add_argument("--out", default="dist-assets",
                    help="output directory for generated static assets")
+    p.add_argument("--titles", default="data/episode-titles.json",
+                   help="curated episode titles/arcs JSON used to fill manifest titles")
     p.add_argument("--limit-episodes", type=int, default=0,
                    help="if >0, only fully process these first N episodes (dev/testing)")
     p.add_argument("--skip-audio", action="store_true",
@@ -58,11 +60,43 @@ def ep_dir(n):
     return f"{n:03d}"
 
 
+def load_titles(path):
+    """Load curated titles/arcs. Returns (ep_map, arcs).
+
+    ep_map: {episode(int): {"title": str, "arc": int}}
+    arcs:   [{id,name,subtitle,title,fromEpisode,toEpisode}] sorted by fromEpisode
+    Raises FileNotFoundError / ValueError on a missing or malformed file so the
+    build fails loudly instead of silently emitting null titles.
+    """
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    ep_map = {}
+    for e in data.get("episodes", []):
+        title = e.get("title")
+        if not title:
+            raise ValueError(f"titles file {path}: episode {e.get('episode')} has empty title")
+        ep_map[int(e["episode"])] = {"title": title, "arc": int(e["arc"])}
+
+    arcs = [
+        {k: a[k] for k in ("id", "name", "subtitle", "title", "fromEpisode", "toEpisode")}
+        for a in data.get("arcs", [])
+    ]
+    arcs.sort(key=lambda a: a["fromEpisode"])
+    return ep_map, arcs
+
+
 def main():
     args = parse_args()
     files = sorted(glob.glob(os.path.join(args.src, "*.parquet")))
     if not files:
         print(f"ERROR: no parquet files under {args.src}", file=sys.stderr)
+        return 2
+
+    try:
+        title_map, arcs = load_titles(args.titles)
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"ERROR: cannot load titles file {args.titles}: {exc}", file=sys.stderr)
         return 2
 
     audio_root = os.path.join(args.out, "audio")
@@ -120,6 +154,7 @@ def main():
 
     # Per-episode index files (entries sorted by id == sequence order)
     manifest_episodes = []
+    missing_titles = []
     for ep in sorted(episodes.keys()):
         entries = sorted(episodes[ep], key=lambda e: e["id"])
         ep_total = round(sum((e["duration"] or 0) for e in entries), 3)
@@ -131,9 +166,13 @@ def main():
                 "totalDuration": ep_total,
                 "entries": entries,
             }, f, ensure_ascii=False)
+        tinfo = title_map.get(ep)
+        if tinfo is None:
+            missing_titles.append(ep)
         manifest_episodes.append({
             "episode": ep,
-            "title": None,  # placeholder; to be filled later
+            "title": tinfo["title"] if tinfo else None,
+            "arc": tinfo["arc"] if tinfo else None,
             "count": len(entries),
             "totalDuration": ep_total,
             "cover": f"covers/ep_{ep_dir(ep)}.jpg",
@@ -149,6 +188,7 @@ def main():
             "episodeCount": len(manifest_episodes),
             "recordCount": processed_records,
             "totalDuration": round(total_duration, 3),
+            "arcs": arcs,
             "episodes": manifest_episodes,
         }, f, ensure_ascii=False, indent=2)
 
@@ -166,6 +206,10 @@ def main():
             errors.append(f"record count {processed_records} != source rows {source_rows}")
     if bad_audio:
         errors.append(f"{len(bad_audio)} records had empty audio bytes, e.g. {bad_audio[:5]}")
+    if missing_titles:
+        errors.append(f"{len(missing_titles)} processed episodes missing a title entry in "
+                      f"{args.titles}: {missing_titles[:20]}"
+                      f"{'...' if len(missing_titles) > 20 else ''}")
 
     print("=== extraction summary ===")
     print(f"parquet files      : {len(files)}")

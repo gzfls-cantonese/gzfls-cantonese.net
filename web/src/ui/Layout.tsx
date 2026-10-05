@@ -1,11 +1,12 @@
 import { Link, Outlet } from 'react-router-dom'
+import Logo from './Logo'
 
 export default function Layout() {
   return (
     <div className="app-shell">
       <header className="app-header">
         <Link to="/" className="brand">
-          <span className="brand-mark">三國</span>
+          <Logo className="brand-logo" size={40} />
           <span className="brand-text">粵語評書</span>
         </Link>
         <nav className="nav">

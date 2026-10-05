@@ -25,6 +25,12 @@ export default function EpisodePage() {
     [manifest.data, episode],
   )
 
+  const arcName = useMemo(() => {
+    const arcs = manifest.data?.arcs
+    if (!arcs || summary?.arc == null) return null
+    return arcs.find((a) => a.id === summary.arc)?.title ?? null
+  }, [manifest.data, summary])
+
   if (!valid)
     return (
       <div className="page center">
@@ -52,7 +58,15 @@ export default function EpisodePage() {
     )
   if (!ep.data) return null
 
-  return <EpisodeView episode={episode} data={ep.data} cover={summary?.cover} title={summary?.title ?? null} />
+  return (
+    <EpisodeView
+      episode={episode}
+      data={ep.data}
+      cover={summary?.cover}
+      title={summary?.title ?? null}
+      arcName={arcName}
+    />
+  )
 }
 
 function EpisodeView({
@@ -60,16 +74,19 @@ function EpisodeView({
   data,
   cover,
   title,
+  arcName,
 }: {
   episode: number
   data: EpisodeIndex
   cover?: string
   title?: string | null
+  arcName?: string | null
 }) {
+  const displayTitle = title ?? `第 ${episode} 集`
   const player = usePlayer({
     episode,
     entries: data.entries,
-    episodeTitle: title ?? `第 ${episode} 集`,
+    episodeTitle: displayTitle,
   })
 
   return (
@@ -80,7 +97,8 @@ function EpisodeView({
           <Link className="back" to="/">
             ‹ 選集
           </Link>
-          <h1>第 {episode} 集</h1>
+          <h1 className="episode__title">{displayTitle}</h1>
+          <p className="episode__no">第 {episode} 集{arcName ? ` · ${arcName}` : ''}</p>
           <p className="muted">
             {data.count} 段 · {formatMinutes(data.totalDuration)}
           </p>
