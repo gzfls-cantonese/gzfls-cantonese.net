@@ -150,3 +150,15 @@ dist-deploy/
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Project-local artifacts (never commit)
+# Real browser test recordings used for the ASR spike
+rec-*.webm
+rec-*.m4a
+# ossutil report output
+ossutil_output/
+# Deploy-generated version stamp
+.deploy-version
+# Python bytecode
+__pycache__/
+*.pyc
