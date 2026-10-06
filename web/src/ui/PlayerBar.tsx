@@ -1,12 +1,15 @@
+import type { ReactNode } from 'react'
 import type { PlayerState } from '../player/usePlayer'
 
 interface Props {
   player: PlayerState
   total: number
+  /** Optional record control rendered beside the play/pause button. */
+  recordSlot?: ReactNode
 }
 
-export default function PlayerBar({ player, total }: Props) {
-  const { currentIndex, status, toggle, next, prev } = player
+export default function PlayerBar({ player, total, recordSlot }: Props) {
+  const { currentIndex, status, toggle } = player
   const pct = total > 0 ? Math.round(((currentIndex + 1) / total) * 100) : 0
   const playing = status === 'playing'
 
@@ -23,9 +26,6 @@ export default function PlayerBar({ player, total }: Props) {
       )}
 
       <div className="player-bar__controls">
-        <button className="icon-btn" onClick={prev} aria-label="上一条" disabled={currentIndex <= 0}>
-          ⏮
-        </button>
         <button
           className="icon-btn icon-btn--main"
           onClick={toggle}
@@ -33,14 +33,7 @@ export default function PlayerBar({ player, total }: Props) {
         >
           {playing ? '⏸' : '▶'}
         </button>
-        <button
-          className="icon-btn"
-          onClick={next}
-          aria-label="下一条"
-          disabled={currentIndex >= total - 1}
-        >
-          ⏭
-        </button>
+        {recordSlot}
       </div>
 
       <div className="player-bar__meta">

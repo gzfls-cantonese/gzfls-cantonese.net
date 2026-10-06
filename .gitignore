@@ -89,6 +89,9 @@ CanCLID/
 # Generated dataset assets (extracted from parquet, not committed)
 dist-assets/
 
+# Generated deploy artifacts (recordings fn zip + env manifest, not committed)
+dist-deploy/
+
 # Gatsby files
 .cache/
 # Comment in the public line in if your project uses Gatsby and not Next.js

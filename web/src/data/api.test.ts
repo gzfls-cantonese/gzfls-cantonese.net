@@ -55,6 +55,6 @@ describe('loadEpisode', () => {
     )
     const ep = await loadEpisode(1)
     expect(ep.entries[0].id).toBe('sg_001_001')
-    expect(fetchMock.mock.calls[0][0]).toMatch(/episodes\/ep_001\.json$/)
+    expect(fetchMock.mock.calls[0][0]).toMatch(/episodes\/ep_001\.json(\?|$)/)
   })
 })

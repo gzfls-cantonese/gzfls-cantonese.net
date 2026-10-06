@@ -1,12 +1,15 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { loadEpisode, loadManifest } from '../data/api'
 import { useAsync } from '../data/useAsync'
 import { usePlayer } from '../player/usePlayer'
+import { useTrialRecord } from '../data/useTrialRecord'
+import { RECORDINGS_API } from '../config'
 import type { EpisodeIndex, Manifest } from '../data/types'
 import CoverImage from './CoverImage'
 import PlayerBar from './PlayerBar'
 import ScriptPanel from './ScriptPanel'
+import TrialRecorder from './TrialRecorder'
 import { formatMinutes } from './HomePage'
 
 export default function EpisodePage() {
@@ -89,6 +92,21 @@ function EpisodeView({
     episodeTitle: displayTitle,
   })
 
+  const currentEntryId = data.entries[player.currentIndex]?.id ?? null
+  const trial = useTrialRecord({
+    episode,
+    entryId: currentEntryId,
+    enabled: RECORDINGS_API !== null,
+    onNeedsDatasetPause: player.pause,
+  })
+
+  // Dataset playback and trial recording are mutually exclusive: starting the
+  // dataset (play button, seeking a line, autoplay) destroys the trial.
+  const disposeTrial = trial.dispose
+  useEffect(() => {
+    if (player.status === 'playing') disposeTrial()
+  }, [player.status, disposeTrial])
+
   return (
     <div className="page episode">
       <header className="episode__head">
@@ -107,7 +125,11 @@ function EpisodeView({
 
       <ScriptPanel entries={data.entries} currentIndex={player.currentIndex} onSelect={player.seekTo} />
 
-      <PlayerBar player={player} total={data.count} />
+      <PlayerBar
+        player={player}
+        total={data.count}
+        recordSlot={<TrialRecorder api={trial} />}
+      />
     </div>
   )
 }

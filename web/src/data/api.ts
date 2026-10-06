@@ -1,4 +1,4 @@
-import { assetUrl } from '../config'
+import { assetUrl, indexUrl } from '../config'
 import type { EpisodeIndex, Manifest } from './types'
 
 export class DataError extends Error {
@@ -26,7 +26,7 @@ async function getJson<T>(url: string): Promise<T> {
 }
 
 export function loadManifest(): Promise<Manifest> {
-  return getJson<Manifest>(assetUrl('manifest.json'))
+  return getJson<Manifest>(indexUrl('manifest.json'))
 }
 
 export function episodeIndexFile(episode: number): string {
@@ -34,7 +34,7 @@ export function episodeIndexFile(episode: number): string {
 }
 
 export function loadEpisode(episode: number): Promise<EpisodeIndex> {
-  return getJson<EpisodeIndex>(assetUrl(episodeIndexFile(episode)))
+  return getJson<EpisodeIndex>(indexUrl(episodeIndexFile(episode)))
 }
 
 export function episodeAudioUrl(entry: { audio: string }): string {
