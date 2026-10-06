@@ -181,9 +181,55 @@ bash tools/deploy/deploy-recordings.sh            # 可选 --out DIR / --functio
 **部署与 bucket 配置**
 
 1. 函数运行时 custom（node ≥ 18），启动命令 `node server.mjs`，上传上面的 zip，按 `.env` 清单设环境变量，挂 HTTP 触发器并记下公网 URL。
-2. OSS **CORS**：允许站点 origin 的 `PUT`，`AllowedHeader` 用 `*`（需覆盖 `Content-Type`）。
-3. OSS **生命周期**：`recordings/` 前缀 7 天后删除——客户端卸载时删除请求未送达的兜底自清。
-4. **RAM**：AccessKey 只授权 `recordings/*` 的 `put`/`delete`，**不给 list**（启用评分后另需 `get`，见 9.2 第 4 步）。
+2. OSS **CORS**（控制台 → bucket → 「权限管理 / 数据安全」下的 **跨域设置 CORS** → 创建规则）。浏览器**直接** `PUT` 录音到 bucket 的签名地址，页面 origin 是站点域名，故必须放行：
+
+   | 字段 | 值 |
+   |---|---|
+   | 来源 Origin | 站点 origin，一行一个（如 `https://<自定义域名>`；本地联调再加 `http://localhost:5180`）。写**协议+域名(+端口)**，不带路径/结尾斜杠 |
+   | 允许 Methods | **PUT**（上传只需 PUT；可一并勾 GET/HEAD 备用） |
+   | 允许 Headers | `*`（需覆盖 `Content-Type`） |
+   | 暴露 Headers | 可留空；如需可读 `ETag` 就填 `ETag`（本项目客户端只判 `res.ok`，非必需） |
+   | 缓存时间 MaxAgeSeconds | `600` |
+   | 返回 Vary: Origin | 建议勾选（多 origin 时避免缓存串味） |
+
+3. OSS **生命周期**（bucket → 「数据管理 / 基础设置」下的 **生命周期 Lifecycle** → 创建规则）。兜底自清：客户端退出/卸载时的 `/dispose` 可能没送达（关页面、断网），故按前缀定期删除，也呼应隐私声明里的「7 天生命周期兜底」：
+
+   | 字段 | 值 |
+   |---|---|
+   | 规则名称 | 如 `recordings-expire-7d` |
+   | 应用范围 | **指定前缀** `recordings/`（带结尾斜杠，须与 `RECORDINGS_PREFIX` 一致） |
+   | 文件过期策略 | 「距**最后修改时间** N 天后**删除**」，N = `7` |
+   | 碎片（Multipart）过期 | 可选建议：`AbortMultipartUpload` 距最后修改 7 天 |
+   | 状态 | 启用 |
+
+   ⚠️ 前缀务必是 `recordings/`，**不要**留空或写 `/`（会作用整个 bucket）。本站数据在 `sanguo/data/`、站点在根（`index.html`/`assets/`）、录音在 `recordings/`，三者互不覆盖。
+
+4. **RAM**（在 **RAM 访问控制控制台**，不在 OSS 控制台）：为函数**单独建一把专用 AK，不要复用 `deploy.sh` 上传站点/数据的那把**（部署 key 对整个 bucket 有读写，塞进公网可达的函数 env 风险不对等；专用 key 泄露也只能动 `recordings/*`）。步骤：
+
+   1. RAM → 身份管理 → 用户 → **创建用户**（如 `sanguo-recordings-fn`），访问方式只勾 **OpenAPI 调用访问** → 生成并保存 AccessKey（Secret 只显示一次）。
+   2. RAM → 权限管理 → 权限策略 → **创建权限策略** → 脚本编辑（JSON），贴入下方策略。
+   3. 回到用户 → **添加权限** → 选该自定义策略授权给它。
+   4. 把这把 AK 填进 **FC 函数环境变量** `OSS_ACCESS_KEY_ID/SECRET`（在函数计算侧，不在 OSS 控制台）。
+
+   策略（对象级三动作、限定前缀；**未启用评分时可去掉 `oss:GetObject`**，仅留 put/delete）：
+
+   ```json
+   {
+     "Version": "1",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": ["oss:PutObject", "oss:GetObject", "oss:DeleteObject"],
+         "Resource": ["acs:oss:*:*:<BUCKET>/<RECORDINGS_PREFIX>/*"]
+       }
+     ]
+   }
+   ```
+
+   - 只写**对象级** resource（`.../<prefix>/*`）、**不写 bucket 级** resource（`acs:oss:*:*:<BUCKET>`），`oss:ListObjects` 天然被拒——这正是「不给 list」的落地方式（客户端无法枚举他人录音），无需另写 Deny。
+   - `HeadObject`（`backend.exists`）与评分签发的仅-GET URL 都需 `GetObject`；签名上传需 `PutObject`；销毁需 `DeleteObject`。
+   - 改过 `RECORDINGS_PREFIX` 就把策略里的前缀一并改掉。
+   - **注**：当前 `oss.mjs` 用**静态长期 AK** 做 V1 签名，不支持 STS 临时凭证（签名里不带 `x-oss-security-token`）。若日后想改用 FC 服务角色下发的临时凭证（函数 env 不放长期 AK），需先给 `oss.mjs` 加 security-token 支持——属后续加固，未实现。
 5. 前端构建时注入 `VITE_RECORDINGS_API=<HTTP 触发器 URL>`（参考 `web/.env.example`）。**不注入则整套录音 UI 不渲染——这就是回滚开关**（另一条回滚路径是直接下线 HTTP 触发器，前端会因取不到 API 而隐藏录音 UI；详见 `ROLLBACK.md`）。
 
 **本地开发**（无需云凭据）
@@ -212,7 +258,7 @@ VITE_RECORDINGS_API=http://localhost:8799 npm run dev --prefix web
 1. 国际站账号登录 Model Studio 控制台 → **地域切到 Singapore** → 同意服务条款即自动开通。
 2. 绑定付款方式；在费用中心设**月度预算告警**（建议 $10 级）。单价量级极低（单次评分远低于一分钱），真正的风险是被脚本无限刷——服务端已加 per-anon + per-IP、每小时 + 每日双固定窗口限流（`ASSESS_RATE_HOURLY`/`ASSESS_RATE_DAILY`，超限 429 且不计费），但状态在单实例进程内、多实例下为尽力而为，故预算告警仍是硬兜底。
 3. 创建 API Key（`sk-...`），并记下控制台给出的 base URL：可能是 `https://dashscope-intl.aliyuncs.com`，也可能是按工作空间隔离的 `https://{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com`——**以控制台实际值为准**。
-4. RAM：录音函数所用子账号在 `recordings/*` 前缀**加 `oss:GetObject`**（现仅 put/delete；仍不给 list）。函数据此签发**仅 GET**、TTL = `RECORDINGS_PRESIGN_TTL`（300s）的签名 URL 交给 ASR。
+4. RAM：录音函数所用子账号在 `recordings/*` 前缀**加 `oss:GetObject`**（现仅 put/delete；仍不给 list）——即 9.1 第 4 步那份策略 JSON（已含 `GetObject`）。函数据此签发**仅 GET**、TTL = `RECORDINGS_PRESIGN_TTL`（300s）的签名 URL 交给 ASR。
 
 **模型选择**
 

@@ -126,7 +126,9 @@ print_deploy_commands() {
     2) upload code package: ${ZIP}
     3) set environment variables from: ${ENVF}
        (put OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET in the function env or a
-        secret store; use a RAM key scoped to put/delete on '${PREFIX}/*' only)
+        secret store; use a DEDICATED RAM key — not the site-deploy key — scoped
+        to put/get/delete on '${PREFIX}/*' only, never list. See DEPLOY.md §9.1
+        for the exact policy JSON.)
     4) attach an HTTP trigger and note its public URL
     5) build the site pointed at it:  VITE_RECORDINGS_API=<trigger-url>
        (see web/.env.example). Leaving it unset hides the whole recording UI —
@@ -138,7 +140,7 @@ print_deploy_commands() {
   After deploy, configure the OSS bucket (see server/recordings/README.md):
     - CORS: allow PUT from the site origin, AllowedHeader '*'
     - lifecycle: delete objects under '${PREFIX}/' after 7 days (orphan safety net)
-    - RAM: scope the AccessKey to put/delete on '${PREFIX}/*' only
+    - RAM: scope the AccessKey to put/get/delete on '${PREFIX}/*' only (no list)
 EOF
 }
 
