@@ -37,6 +37,8 @@ export interface TrialAssessment {
   score?: number
   transcript?: string
   error?: string
+  /** Set on a scored result when the ASR detected a non-Cantonese reading. */
+  languageWarning?: boolean
 }
 
 export interface TrialBubble {
@@ -269,7 +271,7 @@ export function useTrialRecord({
         assessRef.current = null
         assessDoneRef.current = true
         setBubble((b) => (b
-          ? { ...b, assessment: { status: 'scored', score: out.score, transcript: out.transcript } }
+          ? { ...b, assessment: { status: 'scored', score: out.score, transcript: out.transcript, languageWarning: out.languageWarning === true } }
           : b))
       })
       .catch((err) => {

@@ -224,10 +224,26 @@ describe('useTrialRecord scoring', () => {
       status: 'scored',
       score: 88,
       transcript: '我就係楷叔',
+      languageWarning: false,
     })
     // A success is terminal: no second paid call for the same recording.
     act(() => result.current.assess())
     expect(assessRecording).toHaveBeenCalledTimes(1)
+  })
+
+  it('carries a non-Cantonese language warning through to the scored bubble', async () => {
+    vi.mocked(assessRecording).mockResolvedValueOnce({ score: 100, transcript: '我就係楷叔', languageWarning: true })
+    const { result } = await recorded()
+    await act(async () => {
+      result.current.assess()
+    })
+    await flush()
+    expect(result.current.bubble?.assessment).toEqual({
+      status: 'scored',
+      score: 100,
+      transcript: '我就係楷叔',
+      languageWarning: true,
+    })
   })
 
   it('maps server failures, a disposed recording and a timeout to readable messages', async () => {

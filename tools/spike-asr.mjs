@@ -109,7 +109,12 @@ async function probe(file) {
   }
 
   const transcript = json?.choices?.[0]?.message?.content
+  const anns = json?.choices?.[0]?.message?.annotations
+  const language = Array.isArray(anns)
+    ? (anns.find((a) => a && typeof a.language === 'string')?.language ?? '(none)')
+    : '(none)'
   console.log(`HTTP 200 in ${ms}ms — container ACCEPTED`)
+  console.log(`detected language: ${language}   (expect 'yue' for Cantonese, 'zh' for Mandarin)`)
   console.log(`transcript: ${typeof transcript === 'string' ? transcript : JSON.stringify(transcript)}`)
   console.log('(check above: Cantonese quality? traditional or simplified characters?)')
 }

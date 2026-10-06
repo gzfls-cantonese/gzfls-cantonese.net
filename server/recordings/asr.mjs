@@ -18,6 +18,19 @@ const FAKE_TRANSCRIPT = '我就係楷叔，快滴講尼段古仔啦'
 const ASR_TIMEOUT_MS = 20_000
 const CHAT_PATH = '/compatible-mode/v1/chat/completions'
 
+// qwen3-asr-flash reports the *detected* language on the message annotations,
+// e.g. choices[0].message.annotations[0] = {type:'audio_info', language:'yue'}.
+// asr_options.language is only a hint and will not reject other languages, so
+// this is the only signal available to tell Cantonese from a Mandarin reading.
+function extractLanguage(json) {
+  const anns = json?.choices?.[0]?.message?.annotations
+  if (!Array.isArray(anns)) return ''
+  for (const a of anns) {
+    if (a && typeof a.language === 'string' && a.language) return a.language
+  }
+  return ''
+}
+
 export function createTranscriber(cfg, { fetchImpl = fetch, now = Date.now } = {}) {
   const assess = cfg.assess || {}
 
@@ -25,7 +38,8 @@ export function createTranscriber(cfg, { fetchImpl = fetch, now = Date.now } = {
     return {
       kind: 'fake',
       async transcribe() {
-        return { ok: true, transcript: FAKE_TRANSCRIPT }
+        // No detected language offline; leaving it empty means callers never warn.
+        return { ok: true, transcript: FAKE_TRANSCRIPT, language: '' }
       },
     }
   }
@@ -90,7 +104,7 @@ export function createTranscriber(cfg, { fetchImpl = fetch, now = Date.now } = {
         : Array.isArray(content)
           ? content.map((c) => (typeof c?.text === 'string' ? c.text : '')).join('')
           : ''
-      return { ok: true, transcript }
+      return { ok: true, transcript, language: extractLanguage(json) }
     },
   }
 }

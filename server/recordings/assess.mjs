@@ -8,6 +8,14 @@
  */
 import { scoreReading, scoreReadingHomophone } from './similarity.mjs'
 
+// Detected-language codes that count as Cantonese. qwen3-asr-flash reports 'yue'
+// for Cantonese and 'zh' for Mandarin; accept 'yue' and its region variants so a
+// Cantonese reading is never flagged, while a Mandarin reading still is.
+export function isCantonese(code) {
+  const c = String(code || '').trim().toLowerCase()
+  return c === 'yue' || c.startsWith('yue-') || c.startsWith('yue_') || c === 'zh-yue'
+}
+
 export function createAssessService(cfg, backend, { transcriber, references, dict }) {
   const haveDict = !!(dict && Object.keys(dict).length)
   return {
@@ -31,7 +39,13 @@ export function createAssessService(cfg, backend, { transcriber, references, dic
       if (score === null) {
         return { ok: false, status: 503, error: reason === 'empty-transcript' ? 'ASR returned no transcript' : reason }
       }
-      return { ok: true, score, transcript: asr.transcript }
+      // The ASR language option is only a hint, so a Mandarin reading still gets
+      // transcribed (and can score high on character similarity). Flag it via the
+      // detected language instead of suppressing the score; unknown/absent never
+      // warns, so offline fake mode and any response without annotations are safe.
+      const detected = String(asr.language || '').trim()
+      const languageWarning = !!detected && !isCantonese(detected)
+      return { ok: true, score, transcript: asr.transcript, languageWarning }
     },
   }
 }

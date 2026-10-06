@@ -157,6 +157,21 @@ describe('TrialRecorder scoring', () => {
     expect(screen.queryByRole('button', { name: '評分' })).not.toBeInTheDocument()
     // Playback stays available after scoring.
     expect(screen.getByLabelText('回放录音')).toBeInTheDocument()
+    // No language warning unless the server flagged a non-Cantonese reading.
+    expect(screen.queryByText('偵測到非粵語發音，建議用粵語朗讀')).not.toBeInTheDocument()
+  })
+
+  it('shows a non-Cantonese warning alongside the score when flagged', () => {
+    render(
+      rec(
+        api({
+          phase: 'recorded',
+          bubble: bubble({ assessment: { status: 'scored', score: 100, transcript: '我就係楷叔', languageWarning: true } }),
+        }),
+      ),
+    )
+    expect(screen.getByText('100分')).toBeInTheDocument()
+    expect(screen.getByText('偵測到非粵語發音，建議用粵語朗讀')).toBeInTheDocument()
   })
 
   it('shows an understandable failure and offers a retry', () => {

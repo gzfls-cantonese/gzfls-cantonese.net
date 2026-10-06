@@ -21,6 +21,17 @@ function okResponse(content) {
   return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content } }] }) }
 }
 
+// Real qwen3-asr-flash reports the detected language on message annotations.
+function okResponseWithLang(content, language) {
+  return {
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({
+      choices: [{ message: { content, annotations: [{ type: 'audio_info', language }] } }],
+    }),
+  }
+}
+
 test('fake mode returns a stable transcript without touching the network', async () => {
   const { calls, impl } = countingFetch()
   const cfg = { assess: { mode: 'fake', apiKey: 'sk-test' }, presignTtlSec: 300 }
@@ -31,6 +42,7 @@ test('fake mode returns a stable transcript without touching the network', async
   assert.equal(a.ok, true)
   assert.equal(a.transcript, b.transcript)
   assert.ok(a.transcript.length > 0)
+  assert.equal(a.language, '', 'offline stub reports no detected language')
   assert.equal(calls.length, 0)
 })
 
@@ -44,7 +56,7 @@ test('real mode posts the audio url to the compatible-mode endpoint', async () =
   assert.equal(t.kind, 'real')
   const out = await t.transcribe({ url: 'https://oss/presigned.webm', ext: 'webm' })
 
-  assert.deepEqual(out, { ok: true, transcript: '我就係楷叔' })
+  assert.deepEqual(out, { ok: true, transcript: '我就係楷叔', language: '' })
   assert.equal(seen.length, 1)
   assert.equal(seen[0].url, 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions')
   assert.equal(seen[0].init.method, 'POST')
@@ -59,6 +71,13 @@ test('real mode posts the audio url to the compatible-mode endpoint', async () =
   assert.equal(body.messages[0].content[0].input_audio.data, 'https://oss/presigned.webm')
 })
 
+test('real mode surfaces the detected language from annotations', async () => {
+  const yue = createTranscriber(REAL_CFG, { fetchImpl: async () => okResponseWithLang('我就係楷叔', 'yue') })
+  assert.deepEqual(await yue.transcribe({ url: 'u', ext: 'webm' }), { ok: true, transcript: '我就係楷叔', language: 'yue' })
+  const zh = createTranscriber(REAL_CFG, { fetchImpl: async () => okResponseWithLang('我就系楷叔', 'zh') })
+  assert.deepEqual(await zh.transcribe({ url: 'u', ext: 'webm' }), { ok: true, transcript: '我就系楷叔', language: 'zh' })
+})
+
 test('real mode joins array-shaped content into one transcript', async () => {
   const impl = async () => ({
     ok: true,
@@ -66,7 +85,7 @@ test('real mode joins array-shaped content into one transcript', async () => {
     text: async () => JSON.stringify({ choices: [{ message: { content: [{ text: '甲' }, { text: '乙' }] } }] }),
   })
   const out = await createTranscriber(REAL_CFG, { fetchImpl: impl }).transcribe({ url: 'u', ext: 'webm' })
-  assert.deepEqual(out, { ok: true, transcript: '甲乙' })
+  assert.deepEqual(out, { ok: true, transcript: '甲乙', language: '' })
 })
 
 test('real mode is unavailable without credentials or base url', async () => {

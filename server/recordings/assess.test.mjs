@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createAssessService } from './assess.mjs'
+import { createAssessService, isCantonese } from './assess.mjs'
 
 const REF = '我就係楷叔，快滴講尼段古仔啦'
 
@@ -19,7 +19,7 @@ test('scores against the reference transcript', async () => {
   const backend = { getPresign(key, ttl) { presigned.push({ key, ttl }); return 'https://oss/signed' } }
   const { svc } = make({ references: okReferences(), transcriber, backend })
   const out = await svc.score({ episode: 1, entryId: 'e1', key: 'recordings/a/1_e1_r1.webm' })
-  assert.deepEqual(out, { ok: true, score: 100, transcript: REF })
+  assert.deepEqual(out, { ok: true, score: 100, transcript: REF, languageWarning: false })
   assert.deepEqual(presigned, [{ key: 'recordings/a/1_e1_r1.webm', ttl: 300 }])
 })
 
@@ -76,7 +76,28 @@ test('uses homophone scoring when a dict and reference jyutping are present', as
   const backend = { getPresign() { throw new Error('must not presign in fake mode') } }
   const { svc } = make({ references, transcriber, backend, dict: { 詩: 'si', 史: 'si' } })
   const out = await svc.score({ episode: 1, entryId: 'e1', key: 'recordings/a/1_e1_r1.opus' })
-  assert.deepEqual(out, { ok: true, score: 100, transcript: '史' })
+  assert.deepEqual(out, { ok: true, score: 100, transcript: '史', languageWarning: false })
+})
+
+test('flags a non-Cantonese detected language but still returns the score', async () => {
+  const transcriber = { kind: 'real', async transcribe() { return { ok: true, transcript: REF, language: 'zh' } } }
+  const backend = { getPresign: () => 'https://oss/signed' }
+  const { svc } = make({ references: okReferences(), transcriber, backend })
+  const out = await svc.score({ episode: 1, entryId: 'e1', key: 'recordings/a/1_e1_r1.webm' })
+  assert.deepEqual(out, { ok: true, score: 100, transcript: REF, languageWarning: true })
+})
+
+test('a Cantonese detected language carries no warning', async () => {
+  const transcriber = { kind: 'real', async transcribe() { return { ok: true, transcript: REF, language: 'yue' } } }
+  const backend = { getPresign: () => 'https://oss/signed' }
+  const { svc } = make({ references: okReferences(), transcriber, backend })
+  const out = await svc.score({ episode: 1, entryId: 'e1', key: 'recordings/a/1_e1_r1.webm' })
+  assert.equal(out.languageWarning, false)
+})
+
+test('isCantonese accepts yue and its variants, rejects Mandarin/other', () => {
+  for (const code of ['yue', 'YUE', ' yue ', 'yue-CN', 'zh-yue']) assert.equal(isCantonese(code), true, code)
+  for (const code of ['zh', 'en', 'zh-CN', '', undefined, null]) assert.equal(isCantonese(code), false, String(code))
 })
 
 test('falls back to char-level scoring when no dict is supplied', async () => {

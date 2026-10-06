@@ -145,7 +145,7 @@ export async function handle(cfg, backend, req, deps = {}) {
     if (!found) return json(404, { error: 'recording not found' }, cors)
     const out = await deps.assess.score({ episode, entryId, key })
     if (!out.ok) return json(out.status || 503, { error: out.error }, cors)
-    return json(200, { score: out.score, transcript: out.transcript }, cors)
+    return json(200, { score: out.score, transcript: out.transcript, languageWarning: out.languageWarning === true }, cors)
   }
 
   // /dispose

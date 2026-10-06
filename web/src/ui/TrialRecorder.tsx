@@ -92,6 +92,9 @@ export default function TrialRecorder({ api }: { api: TrialRecordApi }) {
                 <div className="trial-bubble__result" role="status">
                   <span className="trial-bubble__score">{api.bubble.assessment.score}分</span>
                   <span className="trial-bubble__transcript">{api.bubble.assessment.transcript}</span>
+                  {api.bubble.assessment.languageWarning && (
+                    <span className="trial-bubble__warn">偵測到非粵語發音，建議用粵語朗讀</span>
+                  )}
                 </div>
               )}
 

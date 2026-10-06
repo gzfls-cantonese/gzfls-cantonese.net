@@ -697,6 +697,13 @@ code {
   overflow-wrap: anywhere;
 }
 
+.trial-bubble__warn {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #fbbf24;
+}
+
 .trial-bubble__icon {
   font-size: 13px;
   line-height: 1;

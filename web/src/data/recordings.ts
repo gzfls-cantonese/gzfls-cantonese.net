@@ -39,6 +39,11 @@ export interface AssessResult {
   /** 0–100 character-level similarity against the span's reference text. */
   score: number
   transcript: string
+  /**
+   * True when the ASR detected a non-Cantonese reading (e.g. Mandarin). The
+   * score is still returned; this only drives an advisory hint in the UI.
+   */
+  languageWarning?: boolean
 }
 
 const EXT_BY_MIME: Record<string, string> = {
