@@ -181,6 +181,30 @@ bash tools/deploy/deploy-recordings.sh            # 可选 --out DIR / --functio
 **部署与 bucket 配置**
 
 1. 函数运行时 custom（node ≥ 18），启动命令 `node server.mjs`，上传上面的 zip，按 `.env` 清单设环境变量，挂 HTTP 触发器并记下公网 URL。
+
+   ⚠️ **HTTP 触发器「认证方式」必须选「无需认证」（anonymous），不能用「签名认证」**。本接口面向公网浏览器，前端无法对 FC 请求签名；若误选签名认证，所有 `presign-upload`/`dispose`/`assess` 会被 FC 网关直接挡下（浏览器只能本地回放刚录的音频，上传与评分全废）。请求方法需放行 `POST`、`GET`、`OPTIONS`（`OPTIONS` 供 CORS 预检）。访问隔离靠 `X-Anon-Id` 前缀 + 服务端重建 key，不靠 FC 签名，故无需认证是符合设计的。
+
+   **排障（评分按钮不显示 / 上传失败）**：先绕过前端直接打接口，看返回体：
+
+   ```bash
+   curl -s -X POST https://<HTTP触发器URL>/presign-upload \
+     -H 'content-type: application/json' \
+     -H 'x-anon-id: 11111111-1111-4111-8111-111111111111' \
+     -d '{"episode":1,"entryId":"sg_001_001","durationSec":5,"mime":"audio/webm"}'
+   ```
+
+   > body 四字段缺一不可（前端 `presignUpload` 会自动带全，手写测试命令时才易漏）：`episode`（数字 1–999，独立字段、**不从 `entryId` 推导**）、`entryId`（`[A-Za-z0-9_-]{1,64}`）、`durationSec`（>0 且 ≤ `RECORDINGS_MAX_DURATION`，默认 60）、`mime`。`x-anon-id` 须是合法 UUID v4。
+
+   | 返回 | 含义 | 处理 |
+   |---|---|---|
+   | `{"Code":"MissingRequiredHeader",...Date...}` | 触发器是**签名认证** | 改为「无需认证」（见上） |
+   | `{"error":"invalid episode"}` | body 缺 `episode`（数字，1–999），或非法 | 带上 `"episode":<集号>` |
+   | `{"error":"duration exceeds limit"}`（413） | 缺 `durationSec`（`Number(undefined)=NaN`）或超上限 | 带上 `"durationSec":<秒>`，且 ≤ `RECORDINGS_MAX_DURATION` |
+   | `{"error":"invalid entryId"}` / `invalid anon` 等 | 对应字段非法（`entryId` 须匹配 `[A-Za-z0-9_-]{1,64}`；`x-anon-id` 须是合法 UUID v4） | 按格式修正重试 |
+   | `{"recId":...,"uploadUrl":...,"assessAvailable":false}` | 上传链路通，但**评分未开** | 补函数环境 `DASHSCOPE_API_KEY` + `ASSESS_ASR_BASE`（见 9.2），重启后应变 `true` |
+   | `{...,"assessAvailable":true}` | 全通 | 刷新页面，「評分」按钮出现 |
+
+   > 注：`assessAvailable` 由服务端计算（`config.mjs`）——需 `DASHSCOPE_API_KEY` 非空**且**（oss 后端或 `ASSESS_ASR=fake`）。前端「評分」按钮只在该字段为 `true` 时渲染，故「只能回放、无评分」优先查此字段，而非怀疑权限或新加坡延迟（延迟只会让评分慢/超时，不会让按钮消失）。
 2. OSS **CORS**（控制台 → bucket → 「权限管理 / 数据安全」下的 **跨域设置 CORS** → 创建规则）。浏览器**直接** `PUT` 录音到 bucket 的签名地址，页面 origin 是站点域名，故必须放行：
 
    | 字段 | 值 |
@@ -269,9 +293,9 @@ VITE_RECORDINGS_API=http://localhost:8799 npm run dev --prefix web
 | 变量 | 建议值 | 说明 |
 |---|---|---|
 | `DASHSCOPE_API_KEY` | `sk-...` | **密钥**，必需。不配 ⇒ `assessAvailable=false` ⇒ 前端「评分」按钮不渲染 |
-| `ASSESS_ASR_BASE` | 控制台显示的 intl endpoint | 地域相关，必须可配，勿硬编码 |
+| `ASSESS_ASR_BASE` | 控制台显示的 intl endpoint | 地域相关，必须可配，勿硬编码。**必须含协议前缀 `https://`**——代码直接拼 `${ASSESS_ASR_BASE}/compatible-mode/v1/chat/completions`，只去尾斜杠、不补 scheme；漏了 `https://`（如误填 `ws-xxx.ap-southeast-1.maas.aliyuncs.com`）会让 `fetch` 抛非法 URL，`/assess` 返回 `503 {"error":"ASR unreachable"}`，前端显示「評分失敗」。工作空间专属域名（`{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com`）须配同一工作空间/新加坡地域下创建的 API Key |
 | `ASSESS_ASR_MODEL` | `qwen3-asr-flash` | 可覆盖 |
-| `ASSESS_ASR_LANG` | `yue` | 粤语 |
+| `ASSESS_ASR_LANG` | `yue` | 粤语。**注意这是「提示」不是「强制」**：`qwen3-asr-flash` 不会因语种不符而拒绝，普通话朗读照样被转写、还可能因字符/同音相似拿高分。函数改为读响应里的**检测语种**（`annotations[].language`），检测到非粤语时仍照常打分，但在响应加 `languageWarning:true`，前端另显示一行「偵測到非粵語發音，建議用粵語朗讀」。若要更严（普通话直接不给分），需把 `assess.mjs` 的警告改成拦截 |
 | `ASSESS_DATASET_BASE` | 生产可留空 | 参考文本来源；未设时按 `https://<OSS_BUCKET>.<OSS_ENDPOINT>/<OSS_PREFIX>/data` 推导（故需 `OSS_PREFIX`，默认 `sanguo`）。**local 后端无 OSS 配置 ⇒ 推导为空 ⇒ 评分 503，本地必须显式设置** |
 | `ASSESS_ASR` | `fake` | **仅本地/e2e**：走确定性 stub 转写，不发网络请求。仍需一个占位 `DASHSCOPE_API_KEY` 才会亮起按钮 |
 | `ASSESS_RATE_HOURLY` | `10` | `/assess` 每匿名 ID / 每客户端 IP 的每小时评分上限，设 `0` 关窗。命中返回 `429` + `Retry-After`，不计费 ASR |
