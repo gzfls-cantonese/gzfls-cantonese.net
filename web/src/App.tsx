@@ -3,6 +3,7 @@ import Layout from './ui/Layout'
 import HomePage from './ui/HomePage'
 import EpisodePage from './ui/EpisodePage'
 import AboutPage from './ui/AboutPage'
+import RecordingPrivacyPage from './ui/RecordingPrivacyPage'
 
 export default function App() {
   return (
@@ -11,6 +12,7 @@ export default function App() {
         <Route index element={<HomePage />} />
         <Route path="episode/:episode" element={<EpisodePage />} />
         <Route path="about" element={<AboutPage />} />
+        <Route path="recording-privacy" element={<RecordingPrivacyPage />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>
