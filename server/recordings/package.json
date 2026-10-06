@@ -1,0 +1,14 @@
+{
+  "name": "sanguo-recordings-fn",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal serverless backend for anonymous trial recordings: presigned upload + dispose only.",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

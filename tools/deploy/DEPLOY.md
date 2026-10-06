@@ -2,13 +2,15 @@
 
 把当前全部网页内容（前端构建产物 + 静态数据制品）部署到指定的阿里云 OSS Bucket。
 本项目**没有独立后端服务**：所谓"后端"即静态数据制品（音频 + 索引 JSON），与前端一样都是静态文件，全部进 OSS。
-若后续引入函数计算 FC（上传/评分控制面），FC 代码部署到函数计算，**不进 OSS**；OSS 只放静态资源与用户录音对象。
+若后续引入函数计算 FC（上传/评分控制面），FC 代码部署到函数计算，**不进 OSS**；OSS 只放静态资源与用户录音对象。见 §9。
 
 **部署方案（A）：前端上传到 bucket 根**，由 OSS 静态网站托管直接以 `/index.html` 对外服务；数据制品放在稳定前缀 `<PREFIX>/data/`（默认 `sanguo/data/`），一次上传、跨部署共用。不使用 CDN 回源到版本目录。
 
 配套文件：
 
 - `deploy.sh` — 上传脚本（site → bucket 根；数据 → 稳定前缀）
+- `deploy-data-index.sh` — 只刷新 `manifest.json` 与 `episodes/*.json`（不重传音频）
+- `deploy-recordings.sh` — 录音函数打包脚本（zip + env 清单；**不推送、不调用云 API**）
 - `ROLLBACK.md` — 回滚方案（本目录）
 
 ---
@@ -140,3 +142,120 @@ bash tools/deploy/deploy.sh
 
 - 国际站**香港地域免 ICP 备案**；若改用中国大陆地域，自定义域名需 ICP 备案。
 - 各集插图版权未确认前一律占位图，不展示未授权图片（见 README）。
+
+---
+
+## 9. 录音函数（可选特性）
+
+站点主体是纯静态的；录音函数是独立部署的可选特性。它不进 OSS，部署在函数计算或任意常驻容器上。
+
+### 9.1 匿名试讲录音函数（已实现）
+
+代码在 `server/recordings/`：零依赖 Node HTTP 服务，监听 `$PORT`，只提供 `POST /presign-upload`（签名上传）、`POST /dispose`（删除）与 `POST /assess`（按需评分，见 9.2）三个操作，**没有列表或下载接口**。匿名 ID 只经 `X-Anon-Id` 头传入，对象 key 恒由服务端按该 anon 前缀重建，客户端无法寻址他人录音。
+
+**打包（脚本本身不推送、不调用任何云 API）**
+
+```bash
+# 先看计划：打印 env 清单与部署命令，不写文件、不调云
+bash tools/deploy/deploy-recordings.sh --dry-run
+
+# 实际打包：生成 dist-deploy/recordings/<fn>.zip 与同名 .env 清单（dist-deploy/ 已 gitignore）
+export OSS_BUCKET=... OSS_ENDPOINT=... OSS_ACCESS_KEY_ID=... OSS_ACCESS_KEY_SECRET=...
+bash tools/deploy/deploy-recordings.sh            # 可选 --out DIR / --function NAME
+```
+
+**函数环境变量**（`.env` 清单由脚本生成，非密钥项按当前环境填值）
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `OSS_BUCKET` / `OSS_ENDPOINT` | 无 | oss 后端必需；缺失则函数启动即抛错 |
+| `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET` | 无 | **密钥**，清单里只写 `__SET_IN_SECRET_STORE__` 占位符，真实值只放平台函数环境或密钥管理，**绝不入库** |
+| `RECORDINGS_PREFIX` | `recordings` | 私有前缀；对象 key = `<prefix>/<anon>/<episode>_<entryId>_<recId>.<ext>` |
+| `RECORDINGS_MAX_DURATION` | `60` | 单段录音秒数上限，超出返回 413 |
+| `RECORDINGS_PRESIGN_TTL` | `300` | 签名 URL 有效期（秒） |
+| `PORT` | `8788` | 监听端口 |
+| `RECORDINGS_LOCAL_DIR` | 未设 | 设了即切 **local 后端**（文件落盘、无需云凭据），仅用于本地开发/e2e |
+
+> 启用评分还需 `DASHSCOPE_API_KEY` 与 `ASSESS_*` 一组变量，见 9.2。**`deploy-recordings.sh` 生成的 `.env` 清单目前只覆盖上表（录音上传/销毁），`ASSESS_*` 需直接在平台的函数环境里加**；不设 `DASHSCOPE_API_KEY` 即等价于评分关闭。
+
+**部署与 bucket 配置**
+
+1. 函数运行时 custom（node ≥ 18），启动命令 `node server.mjs`，上传上面的 zip，按 `.env` 清单设环境变量，挂 HTTP 触发器并记下公网 URL。
+2. OSS **CORS**：允许站点 origin 的 `PUT`，`AllowedHeader` 用 `*`（需覆盖 `Content-Type`）。
+3. OSS **生命周期**：`recordings/` 前缀 7 天后删除——客户端卸载时删除请求未送达的兜底自清。
+4. **RAM**：AccessKey 只授权 `recordings/*` 的 `put`/`delete`，**不给 list**（启用评分后另需 `get`，见 9.2 第 4 步）。
+5. 前端构建时注入 `VITE_RECORDINGS_API=<HTTP 触发器 URL>`（参考 `web/.env.example`）。**不注入则整套录音 UI 不渲染——这就是回滚开关**（另一条回滚路径是直接下线 HTTP 触发器，前端会因取不到 API 而隐藏录音 UI；详见 `ROLLBACK.md`）。
+
+**本地开发**（无需云凭据）
+
+```bash
+RECORDINGS_LOCAL_DIR=/tmp/recfn PORT=8799 node server/recordings/server.mjs
+VITE_RECORDINGS_API=http://localhost:8799 npm run dev --prefix web
+```
+
+> `vite preview` **不会**挂 `/data` 中间件（那是 dev-only），本地验证数据加载请用 `npm run dev`。
+
+### 9.2 AI 评分（已实现：真实 ASR 客户端 + 同音容错打分）
+
+> ✅ **当前状态**：`POST /assess` 端点、归属重建与存在性检查、参考文本加载（含缓存与 `jyutping`）、**真实 DashScope 客户端**（`asr.mjs` real 模式：`qwen3-asr-flash`、OpenAI 兼容 `/compatible-mode/v1/chat/completions`、同步不轮询、20s 超时）、**同音容错相似度**（去调粤拼音节级，字典 `jyutping-dict.json` 随包）、`ASSESS_ASR=fake` 离线桩、`assessAvailable` 开关与前端「评分」按钮/回显**均已实现并有单测**（服务端合计 65 项）。注入真实 `DASHSCOPE_API_KEY` + `ASSESS_ASR_BASE` 即产出真实分数。**task 2.0 格式实测门槛已通过**：真实浏览器 `.webm`(Chrome/Edge) 与 `.m4a`(Safari) 容器均被 `qwen3-asr-flash` 接受、粤语转写输出为**繁体**（与参考一致，不触发繁简归一）。剩余仅 task 5.2 的云端 oss 后端冒烟。规格与任务见 openspec change `add-user-recorded-cantonese-reading-simple-assessment-in-aliyun-faas-and-ai-framework`。
+>
+> 本小节其余内容（采购、地域、RAM、模型选择、回滚）**不依赖代码**，可提前完成。
+
+**服务与地域（最容易踩的坑）**
+
+- 用的是阿里云百炼（Model Studio）**国际站**的语音识别，不是某个「评分产品」；评分算法（转写 + 与原文的**同音容错**相似度，去调粤拼音节级）由我们自己的函数计算。
+- 百炼国际站**必须按地域开通**，可用地域为**新加坡 `ap-southeast-1`**（另有美东弗吉尼亚）——**香港没有此服务**。本站 OSS 与函数在香港，属跨地域公网调用，延迟可忽略。
+- 计费与中国站**完全独立**：按分钟出账、按月结算。API Key 是**地域级凭据**，拿去调中国站 endpoint 会 401。
+
+**开通步骤**
+
+1. 国际站账号登录 Model Studio 控制台 → **地域切到 Singapore** → 同意服务条款即自动开通。
+2. 绑定付款方式；在费用中心设**月度预算告警**（建议 $10 级）。单价量级极低（单次评分远低于一分钱），真正的风险是被脚本无限刷——服务端已加 per-anon + per-IP、每小时 + 每日双固定窗口限流（`ASSESS_RATE_HOURLY`/`ASSESS_RATE_DAILY`，超限 429 且不计费），但状态在单实例进程内、多实例下为尽力而为，故预算告警仍是硬兜底。
+3. 创建 API Key（`sk-...`），并记下控制台给出的 base URL：可能是 `https://dashscope-intl.aliyuncs.com`，也可能是按工作空间隔离的 `https://{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com`——**以控制台实际值为准**。
+4. RAM：录音函数所用子账号在 `recordings/*` 前缀**加 `oss:GetObject`**（现仅 put/delete；仍不给 list）。函数据此签发**仅 GET**、TTL = `RECORDINGS_PRESIGN_TTL`（300s）的签名 URL 交给 ASR。
+
+**模型选择**
+
+默认 `qwen3-asr-flash`：**同步调用**、粤语语言码 `yue`、单文件 ≤5 分钟且 ≤10 MB、接受公网可达 URL（官方建议托管在 OSS 且直接访问返回 200）。本项目单段 ≤60s、opus/webm 数百 KB，余量充足。带 `-filetrans` 后缀的变体与 `paraformer-v2` 录音文件识别**只支持异步**（提交 `task_id` 后轮询），会要求在一次请求内轮询并抬高函数超时，故不作默认。
+
+**环境变量（代码已读取，见 `server/recordings/README.md`）**
+
+| 变量 | 建议值 | 说明 |
+|---|---|---|
+| `DASHSCOPE_API_KEY` | `sk-...` | **密钥**，必需。不配 ⇒ `assessAvailable=false` ⇒ 前端「评分」按钮不渲染 |
+| `ASSESS_ASR_BASE` | 控制台显示的 intl endpoint | 地域相关，必须可配，勿硬编码 |
+| `ASSESS_ASR_MODEL` | `qwen3-asr-flash` | 可覆盖 |
+| `ASSESS_ASR_LANG` | `yue` | 粤语 |
+| `ASSESS_DATASET_BASE` | 生产可留空 | 参考文本来源；未设时按 `https://<OSS_BUCKET>.<OSS_ENDPOINT>/<OSS_PREFIX>/data` 推导（故需 `OSS_PREFIX`，默认 `sanguo`）。**local 后端无 OSS 配置 ⇒ 推导为空 ⇒ 评分 503，本地必须显式设置** |
+| `ASSESS_ASR` | `fake` | **仅本地/e2e**：走确定性 stub 转写，不发网络请求。仍需一个占位 `DASHSCOPE_API_KEY` 才会亮起按钮 |
+| `ASSESS_RATE_HOURLY` | `10` | `/assess` 每匿名 ID / 每客户端 IP 的每小时评分上限，设 `0` 关窗。命中返回 `429` + `Retry-After`，不计费 ASR |
+| `ASSESS_RATE_DAILY` | `100` | 同上的每日上限，设 `0` 关窗。**限流状态在单实例进程内，多实例下为尽力而为**，硬上限仍靠预算告警 |
+
+**本地跑通评分链路（离线、不计费）**
+
+```bash
+RECORDINGS_LOCAL_DIR=/tmp/recfn PORT=8799 \
+DASHSCOPE_API_KEY=test-key ASSESS_ASR=fake \
+ASSESS_DATASET_BASE=http://localhost:5180/data \
+node server/recordings/server.mjs
+
+VITE_RECORDINGS_API=http://localhost:8799 npm run dev --prefix web   # 需已生成 dist-assets/
+```
+
+长按录音 → 松开上传 → 气泡出现「評分」→ 点击后回显分数与（桩）转写。
+
+**上线前实测（tasks 2.0，已通过 2026-10-06）**
+
+用 `tools/spike-asr.mjs`（base64 data URL，无需 OSS）对新加坡 `qwen3-asr-flash` 实测真实浏览器录音：(a) `.webm`(Chrome/Edge) 与 `.m4a`(Safari) **两种容器均被接受、返回 HTTP 200**（文档只点名 AAC/WAV/MP3，但 webm/opus 实测可用，故无需改录音格式）；(b) 粤语转写质量可用；(c) **输出为繁体**，与参考文本一致，不触发繁简归一。复现：
+```bash
+export DASHSCOPE_API_KEY='sk-...' ASSESS_ASR_BASE='https://dashscope-intl.aliyuncs.com'
+node tools/spike-asr.mjs rec-edge.webm rec-safari.m4a
+```
+
+**同音打分字典**：评分用 `server/recordings/jyutping-dict.json`（`字→去调粤拼`，约 40KB）做同音容错，随函数打包、无运行时依赖。它由 `tools/pipeline/build_jyutping_dict.mjs` 从已发布的 `dist-assets/episodes/*.json` 派生；**数据集（粤拼）变更后须重新生成并重新打包**：`node tools/pipeline/build_jyutping_dict.mjs`。
+
+**灰度与回滚**
+
+不注入 `DASHSCOPE_API_KEY` ⇒ `assessAvailable=false` ⇒ 评分入口不出现，界面与现状一致；移除 Key 或回退函数版本即可整体下线评分，**录音上传/销毁不受影响**。
+
+**隐私提醒**：评分会把访客录音交给第三方 AI 服务处理（分数与转写不持久化、退出即销毁语义不变），这改变了录音功能原先「仅本地回放」的隐私姿态。**已在前端告知**：单集录音区提示文案改为「當前小節試講和AI評分」，其下下划线链接「錄音和AI評分隱私處理聲明」指向新页面 `/recording-privacy`（说明收集范围、匿名隔离存放、退出即销毁 + 生命周期兜底、向第三方 AI 提供短时效只读链接且结果不持久化）。该页随前端构建一并部署，无需函数侧改动。
