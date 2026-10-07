@@ -45,6 +45,12 @@ export function createTranscriber(cfg, { fetchImpl = fetch, now = Date.now } = {
   }
 
   const endpoint = assess.asrBase ? `${assess.asrBase}${CHAT_PATH}` : ''
+  // A forced language hint makes qwen3-asr-flash echo that language back on the
+  // annotations even for other-language audio, which defeats non-Cantonese
+  // detection. Default 'auto' (or empty) omits the hint so the model truly
+  // auto-detects: Cantonese still comes back 'yue' with a traditional transcript.
+  const langHint = String(assess.asrLang || '').trim()
+  const autoLang = langHint === '' || langHint.toLowerCase() === 'auto'
 
   return {
     kind: 'real',
@@ -62,7 +68,7 @@ export function createTranscriber(cfg, { fetchImpl = fetch, now = Date.now } = {
           { role: 'user', content: [{ type: 'input_audio', input_audio: { data: url } }] },
         ],
         stream: false,
-        asr_options: { language: assess.asrLang, enable_itn: false },
+        asr_options: autoLang ? { enable_itn: false } : { language: langHint, enable_itn: false },
       }
 
       let res

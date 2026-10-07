@@ -71,6 +71,17 @@ test('real mode posts the audio url to the compatible-mode endpoint', async () =
   assert.equal(body.messages[0].content[0].input_audio.data, 'https://oss/presigned.webm')
 })
 
+test('real mode omits the language hint when asrLang is auto or empty', async () => {
+  for (const asrLang of ['auto', 'AUTO', '']) {
+    const seen = []
+    const impl = async (url, init) => { seen.push(init); return okResponse('我就係楷叔') }
+    const cfg = { assess: { ...REAL_CFG.assess, asrLang } }
+    await createTranscriber(cfg, { fetchImpl: impl }).transcribe({ url: 'https://oss/p.webm', ext: 'webm' })
+    const body = JSON.parse(seen[0].body)
+    assert.deepEqual(body.asr_options, { enable_itn: false }, `asrLang=${JSON.stringify(asrLang)} omits language`)
+  }
+})
+
 test('real mode surfaces the detected language from annotations', async () => {
   const yue = createTranscriber(REAL_CFG, { fetchImpl: async () => okResponseWithLang('我就係楷叔', 'yue') })
   assert.deepEqual(await yue.transcribe({ url: 'u', ext: 'webm' }), { ok: true, transcript: '我就係楷叔', language: 'yue' })

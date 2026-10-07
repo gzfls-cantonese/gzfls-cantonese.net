@@ -36,7 +36,10 @@ const MIME_BY_EXT = {
 const apiKey = process.env.DASHSCOPE_API_KEY || ''
 const asrBase = (process.env.ASSESS_ASR_BASE || '').replace(/\/+$/, '')
 const model = process.env.ASSESS_ASR_MODEL || 'qwen3-asr-flash'
+// ASSESS_ASR_LANG=auto omits asr_options.language entirely so the model does true
+// auto-detection; use it to compare against a forced 'yue' hint on the same clip.
 const lang = process.env.ASSESS_ASR_LANG || 'yue'
+const autoDetect = lang.toLowerCase() === 'auto'
 const files = process.argv.slice(2)
 
 if (!apiKey) {
@@ -75,7 +78,7 @@ async function probe(file) {
       },
     ],
     stream: false,
-    asr_options: { language: lang, enable_itn: false },
+    asr_options: autoDetect ? { enable_itn: false } : { language: lang, enable_itn: false },
   }
 
   const t0 = Date.now()
@@ -114,7 +117,9 @@ async function probe(file) {
     ? (anns.find((a) => a && typeof a.language === 'string')?.language ?? '(none)')
     : '(none)'
   console.log(`HTTP 200 in ${ms}ms — container ACCEPTED`)
+  console.log(`asr_options.language sent: ${autoDetect ? '(omitted — auto-detect)' : lang}`)
   console.log(`detected language: ${language}   (expect 'yue' for Cantonese, 'zh' for Mandarin)`)
+  console.log(`raw annotations: ${JSON.stringify(anns ?? null)}`)
   console.log(`transcript: ${typeof transcript === 'string' ? transcript : JSON.stringify(transcript)}`)
   console.log('(check above: Cantonese quality? traditional or simplified characters?)')
 }

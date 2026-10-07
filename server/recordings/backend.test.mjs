@@ -116,7 +116,7 @@ test('loadConfig derives the dataset base from the OSS config', () => {
   })
   assert.equal(cfg.assess.datasetBase, 'https://gzfls-cantonese.oss-cn-hongkong.aliyuncs.com/sanguo/data')
   assert.equal(cfg.assess.asrModel, 'qwen3-asr-flash')
-  assert.equal(cfg.assess.asrLang, 'yue')
+  assert.equal(cfg.assess.asrLang, 'auto')
   assert.equal(cfg.assess.mode, '')
 
   const explicit = loadConfig({

@@ -32,7 +32,10 @@ export function loadConfig(env = process.env) {
       apiKey: env.DASHSCOPE_API_KEY || '',
       asrBase: stripSlash(env.ASSESS_ASR_BASE || ''),
       asrModel: env.ASSESS_ASR_MODEL || 'qwen3-asr-flash',
-      asrLang: env.ASSESS_ASR_LANG || 'yue',
+      // 'auto' (default) omits the language hint so the ASR truly auto-detects the
+      // spoken language, which the non-Cantonese warning relies on. Set 'yue' to
+      // force a Cantonese hint — but that masks detection (see asr.mjs).
+      asrLang: env.ASSESS_ASR_LANG || 'auto',
       // Reference transcripts come from the public dataset prefix, which shares
       // the recordings bucket — so the base is derivable and stays optional.
       datasetBase: stripSlash(
