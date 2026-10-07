@@ -91,13 +91,14 @@ export default function ScriptPanel({ entries, currentIndex, onSelect }: Props) 
   return (
     <div className="script-wrap">
       <div className="script-toolbar">
+        <span className="script-hint">可滾屏和點擊跳轉</span>
         <label className="script-toggle">
           <input
             type="checkbox"
             checked={showJyutping}
             onChange={(e) => setShowJyutping(e.target.checked)}
           />
-          <span>粵拼</span>
+          <span>顯示粵拼Jyutping</span>
         </label>
       </div>
       <div className="script" ref={parentRef}>

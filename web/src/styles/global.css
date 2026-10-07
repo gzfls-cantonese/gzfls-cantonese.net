@@ -254,11 +254,7 @@ code {
   font-size: 22px;
   font-weight: 800;
   color: var(--brand-strong);
-  opacity: 0.7;
-}
-
-.cover__label {
-  font-size: 11px;
+  white-space: nowrap;
 }
 
 /* Episode page */
@@ -266,7 +262,7 @@ code {
   display: flex;
   gap: 14px;
   align-items: center;
-  padding: 4px 0 16px;
+  padding: 2px 0 10px;
 }
 
 .episode__cover {
@@ -278,19 +274,20 @@ code {
 }
 
 .episode__info h1 {
-  margin: 2px 0;
+  margin: 1px 0;
   font-size: 22px;
 }
 
-.episode__title {
-  line-height: 1.3;
+.episode__info p {
+  margin: 2px 0;
 }
 
-.episode__no {
-  margin: 2px 0;
-  font-size: 13px;
-  color: var(--brand-strong);
-  font-weight: 600;
+.episode__title {
+  line-height: 1.2;
+}
+
+.episode__title-line {
+  display: block;
 }
 
 .back {
@@ -300,7 +297,7 @@ code {
 
 /* Script panel */
 .script {
-  height: 52vh;
+  height: 60vh;
   overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -353,8 +350,15 @@ code {
 /* Jyutping toolbar + per-character annotation */
 .script-toolbar {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
   padding: 0 2px 8px;
+}
+
+.script-hint {
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .script-toggle {
@@ -448,7 +452,12 @@ code {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  gap: 28px;
+  /* Both children are 56px boxes (the play button and the width-pinned
+     .trial-dock), so centering keeps them symmetric about the bar center. The
+     gap is wide enough that the record caption — centered on the mic button and
+     overflowing its 56px box — clears the play button instead of running under
+     it. */
+  gap: 84px;
 }
 
 .icon-btn {
@@ -537,6 +546,10 @@ code {
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  /* Pin the layout box to the button width so the play/record buttons stay
+     symmetric about the bar center; the wider captions center on the button and
+     overflow the box without shifting it. */
+  width: 56px;
 }
 
 .trial-btn {
@@ -578,7 +591,9 @@ code {
   color: var(--muted);
   text-align: center;
   text-decoration: underline;
-  max-width: 140px;
+  /* Keep the link on one line so the dock shows exactly two caption lines; like
+     the caption it centers on the mic button and overflows the 56px dock. */
+  white-space: nowrap;
 }
 
 .trial-privacy:hover {

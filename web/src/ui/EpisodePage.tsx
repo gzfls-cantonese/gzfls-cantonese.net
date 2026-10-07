@@ -28,12 +28,6 @@ export default function EpisodePage() {
     [manifest.data, episode],
   )
 
-  const arcName = useMemo(() => {
-    const arcs = manifest.data?.arcs
-    if (!arcs || summary?.arc == null) return null
-    return arcs.find((a) => a.id === summary.arc)?.title ?? null
-  }, [manifest.data, summary])
-
   if (!valid)
     return (
       <div className="page center">
@@ -67,7 +61,6 @@ export default function EpisodePage() {
       data={ep.data}
       cover={summary?.cover}
       title={summary?.title ?? null}
-      arcName={arcName}
     />
   )
 }
@@ -77,15 +70,16 @@ function EpisodeView({
   data,
   cover,
   title,
-  arcName,
 }: {
   episode: number
   data: EpisodeIndex
   cover?: string
   title?: string | null
-  arcName?: string | null
 }) {
   const displayTitle = title ?? `第 ${episode} 集`
+  // Chapter titles read as two balanced clauses separated by a space; render
+  // them stacked so the block lines up with the cover card on the left.
+  const titleLines = displayTitle.split(/\s+/).filter(Boolean)
   const player = usePlayer({
     episode,
     entries: data.entries,
@@ -115,8 +109,17 @@ function EpisodeView({
           <Link className="back" to="/">
             ‹ 選集
           </Link>
-          <h1 className="episode__title">{displayTitle}</h1>
-          <p className="episode__no">第 {episode} 集{arcName ? ` · ${arcName}` : ''}</p>
+          <h1 className="episode__title">
+            {titleLines.length >= 2 ? (
+              titleLines.map((line, i) => (
+                <span className="episode__title-line" key={i}>
+                  {line}
+                </span>
+              ))
+            ) : (
+              <span className="episode__title-line">{displayTitle}</span>
+            )}
+          </h1>
           <p className="muted">
             {data.count} 段 · {formatMinutes(data.totalDuration)}
           </p>

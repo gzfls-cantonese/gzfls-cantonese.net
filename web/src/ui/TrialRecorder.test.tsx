@@ -48,12 +48,12 @@ describe('TrialRecorder', () => {
   it('shows the round mic button with the caption', () => {
     render(rec(api()))
     expect(screen.getByLabelText('長按錄音')).toBeInTheDocument()
-    expect(screen.getByText('當前小節試講和AI評分')).toBeInTheDocument()
+    expect(screen.getByText('長按-鬆開，朗读錄製當前小節和AI評分')).toBeInTheDocument()
   })
 
   it('links to the privacy statement below the caption', () => {
     render(rec(api()))
-    const link = screen.getByRole('link', { name: '錄音和AI評分隱私處理聲明' })
+    const link = screen.getByRole('link', { name: '隱私和AI評分說明' })
     expect(link).toBeInTheDocument()
     expect(link).toHaveAttribute('href', '/recording-privacy')
   })

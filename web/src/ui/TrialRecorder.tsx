@@ -118,9 +118,9 @@ export default function TrialRecorder({ api }: { api: TrialRecordApi }) {
         >
           <MicIcon />
         </button>
-        <span className="trial-caption">當前小節試講和AI評分</span>
+        <span className="trial-caption">長按-鬆開，朗读錄製當前小節和AI評分</span>
         <Link className="trial-privacy" to="/recording-privacy">
-          錄音和AI評分隱私處理聲明
+          隱私和AI評分說明
         </Link>
       </div>
     </>
