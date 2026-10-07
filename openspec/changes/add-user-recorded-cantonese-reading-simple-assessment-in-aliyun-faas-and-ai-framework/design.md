@@ -28,7 +28,7 @@
 `oss.mjs` 新增 `presignGetUrl`（V1 签名，verb=GET，空 content-md5/content-type，与现有 `presignPutUrl` 同构），服务端以本人 anon 重建 key 后签发**仅 GET** 的签名 URL，作为 ASR 的音频入参。对象保持私有；函数不承担音频上传/下载带宽与延迟。官方文档明确要求「文件托管在 OSS 且直接访问返回 HTTP 200」，签名 GET 正好满足。**TTL 复用 `RECORDINGS_PRESIGN_TTL`（默认 300s），不用更短的值**：即便选用同步模型，签名 URL 也要在请求内被远端取走，过短的 TTL 会把「远端稍慢」变成不可解释的失败；300s 仍是仅 GET、仅本人单对象，且 `/dispose` 删除对象后 URL 自然 404，暴露面不变。替代方案：函数内 authenticated GET 再把字节传给 ASR——多一跳带宽与内存占用，否决。
 
 **D3 — ASR 默认 `qwen3-asr-flash`（同步调用），走 REST（无 SDK），模型/base/语言均经 env 可配。**
-选同步模型是关键取舍：`qwen3-asr-flash` 支持同步调用（OpenAI 兼容 `/compatible-mode/v1/chat/completions` 或 DashScope 同步），粤语经 `language=yue` 指定，单文件 ≤5 分钟且 ≤10 MB——本项目单段 ≤60s、opus/webm 仅数百 KB，余量充足。同步意味着**不需要提交任务 + 轮询**，`/assess` 一次请求内返回，函数超时不必特意上调，实现与失败语义都更简单。带 `-filetrans` 的变体与 `paraformer-v2` 录音文件识别只支持异步，需在一次请求内轮询到出结果、并据此抬高函数超时，复杂度与超时风险都更高，故**不作为默认**（保留为可切换项：`ASSESS_ASR_MODEL` 覆盖）。env：`ASSESS_ASR_BASE`（国际站 endpoint，控制台可能给 `https://dashscope-intl.aliyuncs.com` 或按工作空间隔离的 `https://{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com`，**以控制台实际值为准，故必须可配**）、`ASSESS_ASR_MODEL`（默认 `qwen3-asr-flash`）、`ASSESS_ASR_LANG`（默认 `yue`）。选 REST 而非 SDK：保持函数零/轻依赖、与现有 oss.mjs 手写签名的风格一致。仍需设**请求超时**（如 20s），超时按失败回退。替代方案：函数内跑 whisper——依赖重、冷启动慢，否决。
+选同步模型是关键取舍：`qwen3-asr-flash` 支持同步调用（OpenAI 兼容 `/compatible-mode/v1/chat/completions` 或 DashScope 同步），粤语经 `language=yue` 指定，单文件 ≤5 分钟且 ≤10 MB——本项目单段 ≤60s、opus/webm 仅数百 KB，余量充足。同步意味着**不需要提交任务 + 轮询**，`/assess` 一次请求内返回，函数超时不必特意上调，实现与失败语义都更简单。带 `-filetrans` 的变体与 `paraformer-v2` 录音文件识别只支持异步，需在一次请求内轮询到出结果、并据此抬高函数超时，复杂度与超时风险都更高，故**不作为默认**（保留为可切换项：`ASSESS_ASR_MODEL` 覆盖）。env：`ASSESS_ASR_BASE`（国际站 endpoint，控制台可能给 `https://dashscope-intl.aliyuncs.com` 或按工作空间隔离的 `https://{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com`，**以控制台实际值为准，故必须可配**）、`ASSESS_ASR_MODEL`（默认 `qwen3-asr-flash`）、`ASSESS_ASR_LANG`（默认 `auto`，即不发语种提示、走真自动检测；见 D12）。选 REST 而非 SDK：保持函数零/轻依赖、与现有 oss.mjs 手写签名的风格一致。仍需设**请求超时**（如 20s），超时按失败回退。替代方案：函数内跑 whisper——依赖重、冷启动慢，否决。
 
 **D4 — 参考文本由服务端从公共数据集前缀拉取，而非客户端传入。**
 按 `episode` 拉 `<data>/episodes/ep_<NNN>.json`，按 `entryId` 取 `transcription` 作为参考。客户端传参考文本可被篡改且易与数据集不一致，否决。`ASSESS_DATASET_BASE` **可选**，未设置时从既有 OSS 配置推导为 `https://<OSS_BUCKET>.<OSS_ENDPOINT>/<OSS_PREFIX>/data`（数据集与录音同 bucket，见 `tools/deploy/DEPLOY.md` 布局），避免新增必填 env。拉取需带超时；**拉取失败或参考文本为空时返回 503，绝不用空参考算分**（空参考会静默得出 0 分）。数据集按构建不可变，缓存 TTL 可长（如 10 分钟）。
@@ -59,7 +59,8 @@ local 后端无法提供公网音频 URL；无 `DASHSCOPE_API_KEY` 时 `/assess`
 - **决策**：读检测语种，非粤语时**照常返回分数**，另置 `languageWarning:true`，前端在分数旁加一行「偵測到非粵語發音，建議用粵語朗讀」。用户明确选「照常评分但标注警告」（而非拒绝或判 0），保留鼓励取向。
 - **判定口径**：`isCantonese` 接受 `yue` 及 `yue-*`/`zh-yue` 变体（用户选「yue 及粤语相关码」）；检测语种缺失（fake 桩、响应无 annotations）时**不告警**，避免误伤粤语用户。
 - **可切换**：若日后要更严（普通话直接不给分），只需把 `assess.mjs` 里的告警改成拦截返回，接口与前端结构不变。
-- **局限**：检测语种由 ASR 给出、准确性以其为准；此为尽力而为的提示，非发音质量的严格判定。真机核验用 `tools/spike-asr.mjs`（已打印检测语种）读普通话/粤语各一段确认 `zh`/`yue` 如期返回（并入 5.2 冒烟）。
+- **关键实测（2026-10-07，`tools/spike-asr.mjs`）**：发 `asr_options.language=yue` 提示时，普通话录音的检测语种被**恒回显为 `yue`**（`annotations[0].language=yue`），告警永远不触发——提示会掩盖检测。改为**自动检测**（省略 `language`）后：普通话→`zh`+简体转写、粤语→`yue`+**繁体**转写（与参考/粤拼字典一致，打分不受影响）。故把默认 `ASSESS_ASR_LANG` 由 `yue` 改为 **`auto`**（`asr.mjs` 在 `auto`/空时省略该字段），生产无需改环境、仅重新部署函数即生效；显式设 `yue` 会退回「掩盖检测」的旧行为。
+- **局限**：检测语种由 ASR 给出、准确性以其为准；此为尽力而为的提示，非发音质量的严格判定。auto 下模型对判为普通话的音频输出简体转写——但这类音频本就会被 `languageWarning` 标注、分数不是重点，且粤语仍为繁体，故不触发 D5/D9 的繁简归一需求。
 
 ## Risks / Trade-offs
 

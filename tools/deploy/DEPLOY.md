@@ -111,19 +111,39 @@ bash tools/deploy/deploy.sh
 
 ## 5. 配置 OSS 静态网站托管（bucket 根）
 
-在 Bucket 控制台开启**静态页面**：
+前端用 `BrowserRouter`（路径如 `/episode/1`、`/about`）。直接访问深链接时 OSS 找不到对应对象，必须让静态托管把「找不到的 key」回退到 `index.html`，否则深链会返回原始 XML `NoSuchKey`（`Content-Type: application/xml`）。在 Bucket 控制台开启**静态页面**：
 
-- **默认首页**：`index.html`
-- **默认 404 页**：`index.html` ← **重要**：前端用 `BrowserRouter`（路径如 `/episode/1`、`/about`），直接访问深链接时 OSS 找不到对应对象；把 404 页也设为 `index.html`，可让单页应用加载后由前端路由接管（返回码为 404 但页面正常渲染）。
-- 访问入口用**静态网站托管 Endpoint**（形如 `<BUCKET>.oss-cn-hongkong.aliyuncs.com` 的 website 端点）或**绑定自定义域名**指向该 Bucket；自定义域名解析到静态托管入口后，用户访问 `/` 即得首页。
+- **默认首页**（IndexDocument.Suffix）：`index.html`
+- **默认 404 页**（ErrorDocument.Key）：`index.html`
+- **错误文档响应码**（ErrorDocument.HttpStatus）：**`200`** ← **SPA 必设**。缺省是 `404`：即便回退到 `index.html`，浏览器/爬虫仍收到 404 状态，深链在部分场景（预取、SEO、某些客户端）被判为「页面不存在」。设为 `200` 才能让深链以成功状态返回应用外壳，由前端路由接管渲染。
+- **子目录首页**（SupportSubDir）：关闭（默认）。
+- 访问入口用**静态网站托管 Endpoint** 或**绑定自定义域名**指向该 Bucket；自定义域名解析到静态托管入口后，index/error 规则同样生效。注意：错误页/首页规则属于**静态网站托管配置**，只有走 website 端点或绑定了该托管的自定义域名才生效；用标准 bucket 端点直接取对象不会触发回退。
 
 数据在同一 bucket 的 `<PREFIX>/data/` 下，前端以 `/sanguo/data/...` 绝对路径访问，无需额外配置。
+
+**命令行方式（ossutil 2.x，等价于控制台上述四项）：**
+
+```bash
+ossutil api put-bucket-website --bucket "<BUCKET>" --website-configuration '{
+  "IndexDocument": { "Suffix": "index.html", "SupportSubDir": false },
+  "ErrorDocument": { "Key": "index.html", "HttpStatus": "200" }
+}'
+# 校验当前配置：
+ossutil api get-bucket-website --bucket "<BUCKET>"
+```
+
+> 需 RAM 权限 `oss:PutBucketWebsite`。`index.html` 必须是 bucket 内已存在的对象（部署后即在根）。
 
 ---
 
 ## 6. 验证
 
 1. 访问站点根 `/`，确认首页加载；直接访问 `/episode/1`、`/about` 深链接也能渲染（验证 404→index.html 生效）。
+   - 命令行判据（回退是否生效）：
+     ```bash
+     curl -s -o /dev/null -w '%{http_code} %{content_type}\n' https://<域名>/episode/1
+     ```
+     **期望** `200 text/html`。若得到 `404 application/xml`（body 为 `NoSuchKey`），说明静态托管错误页未配或响应码非 200 —— 回到 §5。
 2. 打开 `<PREFIX>/data/manifest.json`（如 `/sanguo/data/manifest.json`），确认 `episodeCount=157`、`recordCount` 与源一致。
 3. 直接打开任一条音频 URL（`/sanguo/data/audio/<NNN>/<file>.opus`），确认可播放；在集详情页点开一句，确认跳转播放正常。
 
@@ -295,7 +315,7 @@ VITE_RECORDINGS_API=http://localhost:8799 npm run dev --prefix web
 | `DASHSCOPE_API_KEY` | `sk-...` | **密钥**，必需。不配 ⇒ `assessAvailable=false` ⇒ 前端「评分」按钮不渲染 |
 | `ASSESS_ASR_BASE` | 控制台显示的 intl endpoint | 地域相关，必须可配，勿硬编码。**必须含协议前缀 `https://`**——代码直接拼 `${ASSESS_ASR_BASE}/compatible-mode/v1/chat/completions`，只去尾斜杠、不补 scheme；漏了 `https://`（如误填 `ws-xxx.ap-southeast-1.maas.aliyuncs.com`）会让 `fetch` 抛非法 URL，`/assess` 返回 `503 {"error":"ASR unreachable"}`，前端显示「評分失敗」。工作空间专属域名（`{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com`）须配同一工作空间/新加坡地域下创建的 API Key |
 | `ASSESS_ASR_MODEL` | `qwen3-asr-flash` | 可覆盖 |
-| `ASSESS_ASR_LANG` | `yue` | 粤语。**注意这是「提示」不是「强制」**：`qwen3-asr-flash` 不会因语种不符而拒绝，普通话朗读照样被转写、还可能因字符/同音相似拿高分。函数改为读响应里的**检测语种**（`annotations[].language`），检测到非粤语时仍照常打分，但在响应加 `languageWarning:true`，前端另显示一行「偵測到非粵語發音，建議用粵語朗讀」。若要更严（普通话直接不给分），需把 `assess.mjs` 的警告改成拦截 |
+| `ASSESS_ASR_LANG` | `auto` | 语种提示。**默认 `auto`：不发 `asr_options.language`，让 ASR 真自动检测**——这是非粤语告警能生效的前提。实测：auto 下粤语→检测 `yue`+繁体转写、普通话→检测 `zh`+简体转写；函数读响应里的**检测语种**（`annotations[].language`），非粤语仍照常打分但加 `languageWarning:true`，前端显示「偵測到非粵語發音，建議用粵語朗讀」。⚠️ **不要设成 `yue`**：强制粤语提示会让检测语种**恒回显 `yue`**（实测普通话也返回 `yue`），告警彻底失效。若要更严（普通话直接不给分），把 `assess.mjs` 的警告改成拦截 |
 | `ASSESS_DATASET_BASE` | 生产可留空 | 参考文本来源；未设时按 `https://<OSS_BUCKET>.<OSS_ENDPOINT>/<OSS_PREFIX>/data` 推导（故需 `OSS_PREFIX`，默认 `sanguo`）。**local 后端无 OSS 配置 ⇒ 推导为空 ⇒ 评分 503，本地必须显式设置** |
 | `ASSESS_ASR` | `fake` | **仅本地/e2e**：走确定性 stub 转写，不发网络请求。仍需一个占位 `DASHSCOPE_API_KEY` 才会亮起按钮 |
 | `ASSESS_RATE_HOURLY` | `10` | `/assess` 每匿名 ID / 每客户端 IP 的每小时评分上限，设 `0` 关窗。命中返回 `429` + `Retry-After`，不计费 ASR |

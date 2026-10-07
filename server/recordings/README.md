@@ -6,7 +6,7 @@
 
 评分为无状态单次计算：分数与转写**不写回对象存储**，只在响应里回显；录音销毁后即不可再评分（同样返回 `404`）。
 
-> **实现状态**：`POST /assess` 的归属、校验、参考文本、**真实 DashScope ASR 客户端**（`qwen3-asr-flash`、OpenAI 兼容 `/compatible-mode/v1/chat/completions`、同步不轮询）、**同音容错相似度**、**语种检测告警**（非粤语朗读仍打分但标 `languageWarning`）与**服务端限流**（per-anon + per-IP、每小时 + 每日双固定窗口、429 + Retry-After）均已实现并有单测（服务端合计 79 项）。task 2.0 格式实测门槛已通过：真实浏览器 `.webm`(Chrome/Edge) 与 `.m4a`(Safari) 容器均被接受、粤语转写输出为**繁体**（与参考一致，不触发繁简归一）。尚待：注入真实凭据后的云端 oss 后端冒烟（change `tasks.md` 5.2）。
+> **实现状态**：`POST /assess` 的归属、校验、参考文本、**真实 DashScope ASR 客户端**（`qwen3-asr-flash`、OpenAI 兼容 `/compatible-mode/v1/chat/completions`、同步不轮询）、**同音容错相似度**、**语种检测告警**（非粤语朗读仍打分但标 `languageWarning`）与**服务端限流**（per-anon + per-IP、每小时 + 每日双固定窗口、429 + Retry-After）均已实现并有单测（服务端合计 80 项）。task 2.0 格式实测门槛已通过：真实浏览器 `.webm`(Chrome/Edge) 与 `.m4a`(Safari) 容器均被接受、粤语转写输出为**繁体**（与参考一致，不触发繁简归一）。**语种检测走自动检测**（默认 `ASSESS_ASR_LANG=auto` 不发语种提示）：实测粤语→`yue`+繁体、普通话→`zh`+简体；若发 `yue` 提示则检测语种被恒回显为 `yue`、告警失效。尚待：注入真实凭据后的云端 oss 后端冒烟（change `tasks.md` 5.2）。
 
 ## 环境变量
 
@@ -25,7 +25,7 @@
 | `ASSESS_ASR` | 否 | 无（= 调用真实服务） | 设为 `fake` 使用确定性离线桩转写，供 local 后端 / e2e 跑通整条链路。**注意：按 `assessAvailable` 判据，fake 模式仍需一个（占位）`DASHSCOPE_API_KEY` 才会亮起前端按钮。** |
 | `ASSESS_ASR_BASE` | 评分必填 | 无 | 国际站 DashScope base URL。控制台可能给 `https://dashscope-intl.aliyuncs.com` 或按工作空间隔离的 `https://{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com`，**以控制台实际值为准**。 |
 | `ASSESS_ASR_MODEL` | 否 | `qwen3-asr-flash` | 同步调用的粤语 ASR 模型。单文件 ≤5 分钟且 ≤10 MB（本项目单段 ≤60s，余量充足）。带 `-filetrans` 的变体与 `paraformer-v2` 录音文件识别**只支持异步**（提交 task 后轮询），不作默认。 |
-| `ASSESS_ASR_LANG` | 否 | `yue` | 粤语语言码。 |
+| `ASSESS_ASR_LANG` | 否 | `auto` | 语种提示。默认 `auto` **不发** `asr_options.language`，让 ASR 真自动检测——这是「非粤语告警」的依据（粤语仍回 `yue`+繁体转写，普通话回 `zh`+简体）。设为 `yue` 会强制粤语提示，**但会让检测语种恒回显 `yue`、令告警失效**，除非确知只读粤语否则不要设。 |
 | `ASSESS_DATASET_BASE` | 否 | 由 OSS 配置推导 | 参考文本（公共数据集）根地址。未设置时推导为 `https://<OSS_BUCKET>.<OSS_ENDPOINT>/<OSS_PREFIX>/data`，故需同时设 `OSS_PREFIX`（默认 `sanguo`）。**local 后端无 OSS 配置 ⇒ 推导为空 ⇒ 评分返回 503，本地 e2e 必须显式设置。** |
 | `ASSESS_RATE_HOURLY` | 否 | `10` | `/assess` 每匿名 ID / 每客户端 IP 的**每小时**评分上限，设 `0` 关闭该窗口。命中返回 `429` + `Retry-After`，且不触发付费 ASR。 |
 | `ASSESS_RATE_DAILY` | 否 | `100` | 同上的**每日**上限，设 `0` 关闭该窗口。 |
@@ -87,7 +87,7 @@ cd server/recordings
 node --test          # 或 npm test
 ```
 
-覆盖：OPTIONS/CORS、缺匿名头 403、超时长 413、presign 成功与 `assessAvailable` 各组合、local-put + dispose、跨 anon `deleted:0` 且对象保留、key 遍历（`..`）被拒、未知路由 404、错误方法 405；`/assess` 的参数校验 400、无凭据 503、跨 anon 与销毁后 404、不存在 list/download 路由；GET 签名的 stringToSign 与 verb 绑定；真实 ASR 客户端的请求体/鉴权头/base 拼接、数组内容拼接、缺凭据/无 URL/非 2xx/超时/网络失败/非 JSON 的错误映射；参考文本缓存/TTL/各类失败、返回 `jyutping`；字级相似度与 Python `difflib.SequenceMatcher` 已知结果对照；同音容错（同音不同字=100、忽略声调、不同音节不匹配、字典缺字回退、空粤拼回退）；字典加载与缺失/损坏降级；assess 同音与字级回退两路；限流（每小时/每日双窗口独立、达上限拒绝、滚动重置、被拒不延长锁定、`Retry-After` 取较小窗口、per-anon 与 per-IP 互不串扰、无身份不限流、handler 429 不计费不触数据集）；语种检测（真实客户端从 annotations 取检测语种、fake 模式语种为空、非粤语 `zh` 置 `languageWarning` 且仍打分、粤语 `yue` 不告警、`isCantonese` 接受 `yue` 变体拒绝 `zh`/其他）。合计 79 项。
+覆盖：OPTIONS/CORS、缺匿名头 403、超时长 413、presign 成功与 `assessAvailable` 各组合、local-put + dispose、跨 anon `deleted:0` 且对象保留、key 遍历（`..`）被拒、未知路由 404、错误方法 405；`/assess` 的参数校验 400、无凭据 503、跨 anon 与销毁后 404、不存在 list/download 路由；GET 签名的 stringToSign 与 verb 绑定；真实 ASR 客户端的请求体/鉴权头/base 拼接、数组内容拼接、缺凭据/无 URL/非 2xx/超时/网络失败/非 JSON 的错误映射；参考文本缓存/TTL/各类失败、返回 `jyutping`；字级相似度与 Python `difflib.SequenceMatcher` 已知结果对照；同音容错（同音不同字=100、忽略声调、不同音节不匹配、字典缺字回退、空粤拼回退）；字典加载与缺失/损坏降级；assess 同音与字级回退两路；限流（每小时/每日双窗口独立、达上限拒绝、滚动重置、被拒不延长锁定、`Retry-After` 取较小窗口、per-anon 与 per-IP 互不串扰、无身份不限流、handler 429 不计费不触数据集）；语种检测（真实客户端从 annotations 取检测语种、fake 模式语种为空、非粤语 `zh` 置 `languageWarning` 且仍打分、粤语 `yue` 不告警、`isCantonese` 接受 `yue` 变体拒绝 `zh`/其他、`asrLang` 为 `auto`/空时请求体省略 `language` 提示、为 `yue` 时发送该提示）。合计 80 项。
 
 ## HTTP 接口
 
