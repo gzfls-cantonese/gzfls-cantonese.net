@@ -151,13 +151,24 @@ code {
 
 .hero h1 {
   margin: 0 0 6px;
-  font-size: 26px;
+  /* Title is ~15em wide (14 CJK glyphs + separator); shrink with the viewport
+     so it never wraps on narrow phones, capped at the desktop size. */
+  font-size: min(26px, calc((100vw - 40px) / 15.2));
+  white-space: nowrap;
 }
 
 .hero__sub {
   margin: 0;
   color: var(--ink-soft);
   font-size: 14px;
+}
+
+.hero__sub-line {
+  display: block;
+}
+
+.hero__sub-line + .hero__sub-line {
+  margin-top: 2px;
 }
 
 /* Arc (篇) sections */

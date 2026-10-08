@@ -23,7 +23,10 @@ export default function HomePage() {
       <section className="hero">
         <h1>三國演義 · 張悅楷先生經典評書</h1>
         <p className="hero__sub">
-          共 {data.episodeCount} 集 · {data.recordCount.toLocaleString()} 段 · 聽楷叔講古，品中華史詩，學標準粵語
+          <span className="hero__sub-line">聽楷叔講古，品中華史詩，學標準粵語</span>
+          <span className="hero__sub-line">
+            共 {data.episodeCount} 集，{data.recordCount.toLocaleString()} 段
+          </span>
         </p>
       </section>
 
