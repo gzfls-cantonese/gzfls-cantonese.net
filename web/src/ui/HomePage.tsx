@@ -45,11 +45,14 @@ export default function HomePage() {
 
       <footer className="home__source">
         <span>
-          語料來源：Hugging Face · CanCLID <code>zoengjyutgaai</code>《三國演義》粵語評書
+          語料來源：Hugging Face · <code>CanCLID/zoengjyutgaai</code>
         </span>
-        <a href={data.licenseUrl} target="_blank" rel="noreferrer noopener">
-          {data.license}
-        </a>
+        <span>
+          數據許可協議：
+          <a href={data.licenseUrl} target="_blank" rel="noreferrer noopener">
+            {data.license}
+          </a>
+        </span>
       </footer>
     </div>
   )

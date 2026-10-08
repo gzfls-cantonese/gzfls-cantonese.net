@@ -24,19 +24,21 @@ export default function Layout() {
 
       {!isHome && (
         <footer className="app-footer">
-          <p>
-            語料來源：Hugging Face · CanCLID <code>zoengjyutgaai</code>《三國演義》粵語評書
-          </p>
-          <p>
-            授權：
-            <a
-              href="https://creativecommons.org/publicdomain/zero/1.0/"
-              target="_blank"
-              rel="noreferrer noopener"
-            >
-              CC0 1.0 Universal（公共領域貢獻）
-            </a>
-          </p>
+          <div className="home__source">
+            <span>
+              語料來源：Hugging Face · <code>CanCLID/zoengjyutgaai</code>
+            </span>
+            <span>
+              數據許可協議：
+              <a
+                href="https://creativecommons.org/publicdomain/zero/1.0/"
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                CC0 1.0 Universal
+              </a>
+            </span>
+          </div>
         </footer>
       )}
     </div>

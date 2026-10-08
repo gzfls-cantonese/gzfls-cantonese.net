@@ -4,8 +4,8 @@
   --ink: #0f172a;
   --ink-soft: #57534e;
   --muted: #9a9285;
-  --brand: #2dd4bf;
-  --brand-strong: #0d9488;
+  --brand: #d0603f;
+  --brand-strong: #a63f27;
   --accent: #f472b6;
   --line: #e4ddcd;
   --radius: 16px;
@@ -157,6 +157,7 @@ code {
 
 .hero h1 {
   margin: 0 0 6px;
+  color: var(--brand-strong);
   /* Title is ~15em wide (14 CJK glyphs + separator); shrink with the viewport
      so it never wraps on narrow phones, capped at the desktop size. */
   font-size: min(26px, calc((100vw - 40px) / 15.2));
@@ -202,6 +203,23 @@ code {
   background: rgba(252, 250, 245, 0.9);
 }
 
+.home__mid {
+  scrollbar-color: #cfc4ad var(--bg);
+}
+
+.home__mid::-webkit-scrollbar {
+  width: 10px;
+}
+
+.home__mid::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+.home__mid::-webkit-scrollbar-thumb {
+  background: #cfc4ad;
+  border-radius: 8px;
+}
+
 .home__source {
   display: flex;
   flex-wrap: wrap;
@@ -210,6 +228,28 @@ code {
   padding: 10px 2px 0;
   font-size: 12px;
   color: var(--muted);
+}
+
+.home__source a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.home__source span {
+  white-space: nowrap;
+}
+
+/* Narrow phones: stack the two source lines tightly so the footer stays short
+   and never mid-wraps into a third line. */
+@media (max-width: 430px) {
+  .home__source {
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    padding-top: 8px;
+    font-size: 10px;
+    line-height: 1.3;
+  }
 }
 
 /* Arc (篇) sections */
@@ -279,6 +319,7 @@ code {
   display: flex;
   flex-direction: column;
   gap: 1px;
+  color: var(--ink);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.35;
@@ -536,7 +577,7 @@ code {
   font-size: 22px;
   background: linear-gradient(135deg, var(--brand), var(--brand-strong));
   color: #fff;
-  box-shadow: 0 8px 20px rgba(13, 148, 136, 0.35);
+  box-shadow: 0 8px 20px rgba(166, 63, 39, 0.32);
 }
 
 .player-bar__meta {
@@ -580,16 +621,7 @@ code {
 
 /* Footer */
 .app-footer {
-  border-top: 1px solid var(--line);
-  padding: 18px 16px calc(18px + var(--safe-bottom));
-  text-align: center;
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.7;
-}
-
-.app-footer p {
-  margin: 2px 0;
+  padding: 0 16px calc(12px + var(--safe-bottom));
 }
 
 /* Trial recorder (press-and-hold 錄音) — sits beside the play button */
@@ -698,7 +730,7 @@ code {
   gap: 8px;
   padding: 10px 16px;
   border-radius: 18px;
-  background: linear-gradient(135deg, rgba(45, 212, 191, 0.95), rgba(13, 148, 136, 0.95));
+  background: linear-gradient(135deg, rgba(208, 96, 63, 0.95), rgba(166, 63, 39, 0.95));
   color: #fff;
   font-size: 14px;
   font-weight: 600;
