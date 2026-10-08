@@ -32,7 +32,7 @@ GLYPHS = [
     ("三", 22.0, 32.0, 34.0, None),
     ("國", 41.0, 51.0, 34.0, 3.0),  # stroke width; drawn on top via paint-order
 ]
-GRAD_STOPS = ("#2dd4bf", "#0d9488")
+GRAD_STOPS = ("#d0603f", "#a63f27")
 
 
 def round_d(d):
