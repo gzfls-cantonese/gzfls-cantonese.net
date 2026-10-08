@@ -70,7 +70,18 @@ export default function TrialRecorder({ api }: { api: TrialRecordApi }) {
                   onClick={api.toggleBubble}
                   aria-label={api.bubblePlaying ? '暂停回放' : '回放录音'}
                 >
-                  <span className="trial-bubble__icon">{api.bubblePlaying ? '❚❚' : '▶'}</span>
+                  <span className="trial-bubble__icon" aria-hidden="true">
+                    {api.bubblePlaying ? (
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+                        <rect x="6.5" y="5" width="4" height="14" rx="1.2" />
+                        <rect x="13.5" y="5" width="4" height="14" rx="1.2" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+                        <path d="M8 5.5v13a1 1 0 0 0 1.53.85l10.2-6.5a1 1 0 0 0 0-1.7L9.53 4.65A1 1 0 0 0 8 5.5z" />
+                      </svg>
+                    )}
+                  </span>
                   <span className="trial-bubble__dur">{Math.round(api.bubble.durationSec)}″</span>
                   {api.bubble.uploading && <span className="trial-bubble__up">上傳中…</span>}
                 </button>

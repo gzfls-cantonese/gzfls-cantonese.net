@@ -31,7 +31,18 @@ export default function PlayerBar({ player, total, recordSlot }: Props) {
           onClick={toggle}
           aria-label={playing ? '暂停' : '播放'}
         >
-          {playing ? '⏸' : '▶'}
+          {/* Inline SVG: ▶/⏸ code points render as color emoji on Android,
+              ignoring the button's text colour. */}
+          {playing ? (
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
+              <rect x="6.5" y="5" width="4" height="14" rx="1.2" />
+              <rect x="13.5" y="5" width="4" height="14" rx="1.2" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5.5v13a1 1 0 0 0 1.53.85l10.2-6.5a1 1 0 0 0 0-1.7L9.53 4.65A1 1 0 0 0 8 5.5z" />
+            </svg>
+          )}
         </button>
         {recordSlot}
       </div>
