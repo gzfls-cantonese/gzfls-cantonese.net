@@ -19,7 +19,7 @@ export default function HomePage() {
   const arcs = data.arcs?.length ? data.arcs : null
 
   return (
-    <div className="page">
+    <div className="home">
       <section className="hero">
         <h1>三國演義 · 張悅楷先生經典評書</h1>
         <p className="hero__sub">
@@ -30,16 +30,27 @@ export default function HomePage() {
         </p>
       </section>
 
-      {arcs ? (
-        arcs.map((arc) => (
-          <section className="arc" key={arc.id}>
-            <h2 className="arc__title">{arc.title}</h2>
-            <EpisodeGrid episodes={episodesInArc(data.episodes, arc)} />
-          </section>
-        ))
-      ) : (
-        <EpisodeGrid episodes={data.episodes} />
-      )}
+      <section className="home__mid">
+        {arcs ? (
+          arcs.map((arc) => (
+            <section className="arc" key={arc.id}>
+              <h2 className="arc__title">{arc.title}</h2>
+              <EpisodeGrid episodes={episodesInArc(data.episodes, arc)} />
+            </section>
+          ))
+        ) : (
+          <EpisodeGrid episodes={data.episodes} />
+        )}
+      </section>
+
+      <footer className="home__source">
+        <span>
+          語料來源：Hugging Face · CanCLID <code>zoengjyutgaai</code>《三國演義》粵語評書
+        </span>
+        <a href={data.licenseUrl} target="_blank" rel="noreferrer noopener">
+          {data.license}
+        </a>
+      </footer>
     </div>
   )
 }
