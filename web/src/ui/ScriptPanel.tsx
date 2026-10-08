@@ -54,7 +54,7 @@ export default function ScriptPanel({ entries, currentIndex, onSelect }: Props) 
   const virtualizer = useVirtualizer({
     count: entries.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 88,
+    estimateSize: () => 80,
     overscan: 6,
   })
 

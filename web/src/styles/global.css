@@ -344,7 +344,7 @@ code {
 }
 
 .cover__ep {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 800;
   color: var(--brand-strong);
   white-space: nowrap;
@@ -368,11 +368,12 @@ code {
 
 .episode__info h1 {
   margin: 1px 0;
-  font-size: 22px;
+  font-size: 20px;
 }
 
 .episode__info p {
   margin: 2px 0;
+  font-size: 14px;
 }
 
 .episode__title {
@@ -384,7 +385,7 @@ code {
 }
 
 .back {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -410,28 +411,35 @@ code {
   left: 0;
   width: 100%;
   display: flex;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: 9px;
+  padding: 11px 13px;
   border-bottom: 1px solid var(--line);
   cursor: pointer;
 }
 
 .script__row--active {
-  background: linear-gradient(90deg, rgba(45, 212, 191, 0.16), rgba(45, 212, 191, 0.02));
-  box-shadow: inset 3px 0 0 var(--brand-strong);
+  /* Warm gold-sand fade (not red) so the cinnabar Jyutping stays high-contrast
+     on the light tint; cinnabar left bar + top hairline add the accent. */
+  background: linear-gradient(
+    90deg,
+    rgba(197, 151, 82, 0.2),
+    rgba(197, 151, 82, 0.06) 55%,
+    rgba(197, 151, 82, 0)
+  );
+  box-shadow: inset 3px 0 0 var(--brand-strong), inset 0 1px 0 rgba(197, 151, 82, 0.28);
 }
 
 .script__no {
   flex-shrink: 0;
-  width: 26px;
+  width: 24px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
 .script__text {
-  font-size: 17px;
+  font-size: 15px;
   line-height: 1.7;
 }
 
@@ -477,7 +485,7 @@ code {
   min-width: 0;
   flex-wrap: wrap;
   align-items: flex-start;
-  row-gap: 8px;
+  row-gap: 7px;
 }
 
 .script__cell {
@@ -488,7 +496,7 @@ code {
 }
 
 .script__han {
-  font-size: 17px;
+  font-size: 15px;
   line-height: 1.5;
 }
 
@@ -497,10 +505,15 @@ code {
   font-weight: 600;
 }
 
+.script__row--active .script__jp {
+  color: #9a3a22;
+  font-weight: 600;
+}
+
 .script__jp {
   display: block;
   min-height: 14px;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.3;
   color: var(--brand-strong);
   font-variant-numeric: tabular-nums;
