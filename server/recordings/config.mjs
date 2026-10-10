@@ -83,9 +83,12 @@ export function assessAvailable(cfg, backendKind) {
 export const ANON_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 export const ENTRY_ID_RE = /^[A-Za-z0-9_-]{1,64}$/
 export const REC_ID_RE = /^[A-Za-z0-9-]{4,64}$/
-export const EXT_BY_MIME = {
+// Null prototype on purpose: this is an exact-key lookup over an attacker-
+// supplied mime string, and on a plain literal `EXT_BY_MIME['constructor']`
+// returns Object's constructor — truthy, so the lookup would pass validation.
+export const EXT_BY_MIME = Object.assign(Object.create(null), {
   'audio/opus': 'opus',
   'audio/webm': 'webm',
   'audio/webm;codecs=opus': 'webm',
   'audio/mp4': 'm4a',
-}
+})

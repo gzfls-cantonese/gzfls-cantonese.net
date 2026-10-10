@@ -88,7 +88,7 @@ cd server/recordings
 node --test          # 或 npm test
 ```
 
-覆盖：OPTIONS/CORS、缺匿名头 403、超时长 413、presign 成功与 `assessAvailable` 各组合、local-put + dispose、跨 anon `deleted:0` 且对象保留、key 遍历（`..`）被拒、未知路由 404、错误方法 405；`/assess` 的参数校验 400、无凭据 503、跨 anon 与销毁后 404、不存在 list/download 路由；GET 签名的 stringToSign 与 verb 绑定；真实 ASR 客户端的请求体/鉴权头/base 拼接、数组内容拼接、缺凭据/无 URL/非 2xx/超时/网络失败/非 JSON 的错误映射；参考文本缓存/TTL/各类失败、返回 `jyutping`；字级相似度与 Python `difflib.SequenceMatcher` 已知结果对照；同音容错（同音不同字=100、忽略声调、不同音节不匹配、字典缺字回退、空粤拼回退）；字典加载与缺失/损坏降级；assess 同音与字级回退两路；限流（每小时/每日双窗口独立、达上限拒绝、滚动重置、被拒不延长锁定、`Retry-After` 取较小窗口、per-anon 与 per-IP 互不串扰、无身份不限流、handler 429 不计费不触数据集、单实例全局维度（轮换匿名 ID 与 IP 仍被拦、按小时滚动重置、不继承每日上限、无身份时也生效）、计数表硬上限与「淘汰不重置全局计数」）；语种检测（真实客户端从 annotations 取检测语种、fake 模式语种为空、非粤语 `zh` 置 `languageWarning` 且仍打分、粤语 `yue` 不告警、`isCantonese` 接受 `yue` 变体拒绝 `zh`/其他、`asrLang` 为 `auto`/空时请求体省略 `language` 提示、为 `yue` 时发送该提示）。合计 85 项。
+覆盖：OPTIONS/CORS、缺匿名头 403、超时长 413、presign 成功与 `assessAvailable` 各组合、local-put + dispose、跨 anon `deleted:0` 且对象保留、key 遍历（`..`）被拒、未知路由 404、错误方法 405；`/assess` 的参数校验 400、无凭据 503、跨 anon 与销毁后 404、不存在 list/download 路由；GET 签名的 stringToSign 与 verb 绑定；真实 ASR 客户端的请求体/鉴权头/base 拼接、数组内容拼接、缺凭据/无 URL/非 2xx/超时/网络失败/非 JSON 的错误映射；参考文本缓存/TTL/各类失败、返回 `jyutping`；字级相似度与 Python `difflib.SequenceMatcher` 已知结果对照；同音容错（同音不同字=100、忽略声调、不同音节不匹配、字典缺字回退、空粤拼回退）；字典加载与缺失/损坏降级；assess 同音与字级回退两路；限流（每小时/每日双窗口独立、达上限拒绝、滚动重置、被拒不延长锁定、`Retry-After` 取较小窗口、per-anon 与 per-IP 互不串扰、无身份不限流、handler 429 不计费不触数据集、单实例全局维度（轮换匿名 ID 与 IP 仍被拦、按小时滚动重置、不继承每日上限、无身份时也生效）、计数表硬上限与「淘汰不重置全局计数」）；语种检测（真实客户端从 annotations 取检测语种、fake 模式语种为空、非粤语 `zh` 置 `languageWarning` 且仍打分、粤语 `yue` 不告警、`isCantonese` 接受 `yue` 变体拒绝 `zh`/其他、`asrLang` 为 `auto`/空时请求体省略 `language` 提示、为 `yue` 时发送该提示）；`nosniff`；mime 原型键（`constructor`/`toString`/`__proto__`/`hasOwnProperty`）一律 400；oss 后端 `delete` 同样先做前缀断言（在触网之前）；`server.mjs` 入口的集成测试（真实起进程打 HTTP：2 MB 请求体 ⇒ `413` 且实例仍能服务下一个请求、正常请求体照常路由）。合计 89 项。
 
 ## HTTP 接口
 
@@ -99,9 +99,9 @@ node --test          # 或 npm test
 | `POST /assess` | `X-Anon-Id`（UUID v4） | `{episode, entryId, recId, ext}` | `200 {score, transcript, languageWarning}` / `400` 参数非法 / `403` 匿名头缺失或非法 / `404` 本人前缀下命中不到对象（他人录音或已销毁）/ `429` 超过限流上限（附 `Retry-After`，不计费 ASR）/ `503` 评分不可用、数据集或 ASR 失败 |
 | `POST /dispose` | `X-Anon-Id`（UUID v4） | `{items:[{episode, entryId, recId, ext}]}` | `200 {deleted}` |
 | `PUT /local-put/<key>` | — | 原始音频字节 | **仅 local 后端**：`200 {ok:true}` / `403` key 不在前缀下；oss 后端不存在此路由 |
-| 其他 | — | — | `404` 未知路由 / `405` 方法不允许 |
+| 其他 | — | — | `404` 未知路由 / `405` 方法不允许 / `413` 请求体超过 1 MB |
 
-校验规则：`episode` 为 1–999；`entryId` 匹配 `^[A-Za-z0-9_-]{1,64}$`；`recId` 匹配 `^[A-Za-z0-9-]{4,64}$`；`mime` 限于 `audio/opus`→`opus`、`audio/webm`→`webm`、`audio/webm;codecs=opus`→`webm`、`audio/mp4`→`m4a`；`/assess` 的 `ext` 限于上述 mime 映射出的扩展名。dispose 中任一条目不合法则跳过（不计入 `deleted`）。
+校验规则：`episode` 为 1–999；`entryId` 匹配 `^[A-Za-z0-9_-]{1,64}$`；`recId` 匹配 `^[A-Za-z0-9-]{4,64}$`；`mime` 限于 `audio/opus`→`opus`、`audio/webm`→`webm`、`audio/webm;codecs=opus`→`webm`、`audio/mp4`→`m4a`；`/assess` 的 `ext` 限于上述 mime 映射出的扩展名。dispose 中任一条目不合法则跳过（不计入 `deleted`）。mime 映射表是**空原型**对象，故 `constructor`/`toString`/`__proto__` 这类原型键查不到、一律 `400`（普通对象字面量上它们会返回真值，从而带着一个函数当扩展名继续走下去）。请求体上限由 `server.mjs` 在进入路由前拦下（`MAX_BODY_BYTES`，1 MB）：超限即停止累积并回 `413`，避免单个客户端把实例内存撑爆。所有 JSON 响应带 `x-content-type-options: nosniff`——错误体会回显客户端提供的标识符。
 
 对象 key：`<RECORDINGS_PREFIX>/<anonId>/<episode>_<entryId>_<recId>.<ext>`。
 

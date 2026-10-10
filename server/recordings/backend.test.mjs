@@ -71,10 +71,13 @@ test('oss backend getPresign returns a GET url under the prefix', () => {
   assert.ok(url.searchParams.get('Signature'))
 })
 
-test('keys outside the recordings prefix are rejected', () => {
+test('keys outside the recordings prefix are rejected', async () => {
   const backend = createBackend(OSS_CFG)
   for (const bad of ['other/anon/1_e1_a.opus', 'recordings/../secret.opus', '', undefined]) {
     assert.throws(() => backend.getPresign(bad, 300), /forbidden key/)
+    // delete is the one destructive call, so it must gate on the prefix too —
+    // and it must do so before reaching the network.
+    await assert.rejects(backend.delete(bad), /forbidden key/)
   }
   assert.throws(() => assertUnderPrefix(OSS_CFG, 'nope/x.opus'), /forbidden key/)
   assertUnderPrefix(OSS_CFG, 'recordings/anon/x.opus')

@@ -23,7 +23,13 @@ const KNOWN_EXTS = Object.values(EXT_BY_MIME)
 function json(status, body, extraHeaders = {}) {
   return {
     status,
-    headers: { 'content-type': 'application/json', ...extraHeaders },
+    headers: {
+      'content-type': 'application/json',
+      // Error bodies echo client-supplied identifiers; nosniff keeps an old
+      // browser from rendering one as HTML.
+      'x-content-type-options': 'nosniff',
+      ...extraHeaders,
+    },
     body: JSON.stringify(body),
   }
 }

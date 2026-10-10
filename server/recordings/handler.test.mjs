@@ -43,6 +43,27 @@ test('OPTIONS returns 204 with CORS', async () => {
   assert.equal(out.headers['access-control-allow-origin'], 'http://x')
 })
 
+test('json responses refuse content sniffing', async () => {
+  const { cfg, backend } = await setup()
+  const out = await handle(cfg, backend, req('POST', '/presign-upload', {}, '{}'))
+  assert.equal(out.status, 403)
+  assert.equal(out.headers['x-content-type-options'], 'nosniff')
+})
+
+test('a prototype name as the mime is rejected, not treated as an extension', async () => {
+  const { cfg, backend } = await setup()
+  for (const mime of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+    const out = await handle(cfg, backend, req('POST', '/presign-upload', { 'x-anon-id': ANON_A }, JSON.stringify({
+      episode: 1,
+      entryId: 'e1',
+      durationSec: 5,
+      mime,
+    })))
+    assert.equal(out.status, 400, mime)
+    assert.equal(JSON.parse(out.body).error, 'unsupported mime', mime)
+  }
+})
+
 test('presign-upload rejects missing anon', async () => {
   const { cfg, backend } = await setup()
   const out = await handle(cfg, backend, req('POST', '/presign-upload', {}, JSON.stringify({ episode: 1, entryId: 'e', durationSec: 5 })))

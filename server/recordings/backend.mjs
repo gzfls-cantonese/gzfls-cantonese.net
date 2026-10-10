@@ -41,6 +41,7 @@ export function createBackend(cfg) {
         return headObject(cfg, key)
       },
       async delete(key) {
+        assertUnderPrefix(cfg, key)
         const status = await deleteObject(cfg, key)
         return status === 204 || status === 404
       },
