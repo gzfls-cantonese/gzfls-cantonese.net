@@ -46,6 +46,11 @@ export function loadConfig(env = process.env) {
       // 0 disables that window. Limits apply per-anon and per-IP.
       rateHourly: Number(env.ASSESS_RATE_HOURLY ?? 10),
       rateDaily: Number(env.ASSESS_RATE_DAILY ?? 100),
+      // Per-anon and per-IP caps are both attacker-controlled (anon ids are
+      // client-minted, X-Forwarded-For is client-supplied), so this instance-wide
+      // cap is the only one that actually bounds ASR spend. Serverless scale-out
+      // multiplies it by the number of warm instances.
+      rateGlobalHourly: Number(env.ASSESS_RATE_GLOBAL_HOURLY ?? 200),
     },
   }
   if (cfg.backend === 'oss') {

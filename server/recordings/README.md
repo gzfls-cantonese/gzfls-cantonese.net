@@ -27,8 +27,9 @@
 | `ASSESS_ASR_MODEL` | 否 | `qwen3-asr-flash` | 同步调用的粤语 ASR 模型。单文件 ≤5 分钟且 ≤10 MB（本项目单段 ≤60s，余量充足）。带 `-filetrans` 的变体与 `paraformer-v2` 录音文件识别**只支持异步**（提交 task 后轮询），不作默认。 |
 | `ASSESS_ASR_LANG` | 否 | `auto` | 语种提示。默认 `auto` **不发** `asr_options.language`，让 ASR 真自动检测——这是「非粤语告警」的依据（粤语仍回 `yue`+繁体转写，普通话回 `zh`+简体）。设为 `yue` 会强制粤语提示，**但会让检测语种恒回显 `yue`、令告警失效**，除非确知只读粤语否则不要设。 |
 | `ASSESS_DATASET_BASE` | 否 | 由 OSS 配置推导 | 参考文本（公共数据集）根地址。未设置时推导为 `https://<OSS_BUCKET>.<OSS_ENDPOINT>/<OSS_PREFIX>/data`，故需同时设 `OSS_PREFIX`（默认 `sanguo`）。**local 后端无 OSS 配置 ⇒ 推导为空 ⇒ 评分返回 503，本地 e2e 必须显式设置。** |
-| `ASSESS_RATE_HOURLY` | 否 | `10` | `/assess` 每匿名 ID / 每客户端 IP 的**每小时**评分上限，设 `0` 关闭该窗口。命中返回 `429` + `Retry-After`，且不触发付费 ASR。 |
+| `ASSESS_RATE_HOURLY` | 否 | `10` | `/assess` 每匿名 ID / 每客户端 IP 的**每小时**评分上限，设 `0` 关闭该窗口。命中返回 `429` + `Retry-After`，且不触发付费 ASR。**注意这两个维度都由客户端掌控**（匿名 ID 无签名、可任意生成；IP 取自 `X-Forwarded-For` 请求头），只能挡住正常客户端和粗糙脚本。 |
 | `ASSESS_RATE_DAILY` | 否 | `100` | 同上的**每日**上限，设 `0` 关闭该窗口。 |
+| `ASSESS_RATE_GLOBAL_HOURLY` | 否 | `200` | **单实例**每小时的评分总次数上限，与调用方身份无关，设 `0` 关闭。这是唯一能真正给 ASR 支出封顶的一档；函数横向扩容时按热实例数倍增，故不要把它当作精确账单上限。 |
 | `OSS_PREFIX` | 否 | `sanguo` | 仅用于推导 `ASSESS_DATASET_BASE`（数据集与录音同 bucket、不同前缀）。 |
 
 oss 后端下缺失任一 `OSS_*` 变量，进程启动即抛错并列出缺失项。
@@ -87,7 +88,7 @@ cd server/recordings
 node --test          # 或 npm test
 ```
 
-覆盖：OPTIONS/CORS、缺匿名头 403、超时长 413、presign 成功与 `assessAvailable` 各组合、local-put + dispose、跨 anon `deleted:0` 且对象保留、key 遍历（`..`）被拒、未知路由 404、错误方法 405；`/assess` 的参数校验 400、无凭据 503、跨 anon 与销毁后 404、不存在 list/download 路由；GET 签名的 stringToSign 与 verb 绑定；真实 ASR 客户端的请求体/鉴权头/base 拼接、数组内容拼接、缺凭据/无 URL/非 2xx/超时/网络失败/非 JSON 的错误映射；参考文本缓存/TTL/各类失败、返回 `jyutping`；字级相似度与 Python `difflib.SequenceMatcher` 已知结果对照；同音容错（同音不同字=100、忽略声调、不同音节不匹配、字典缺字回退、空粤拼回退）；字典加载与缺失/损坏降级；assess 同音与字级回退两路；限流（每小时/每日双窗口独立、达上限拒绝、滚动重置、被拒不延长锁定、`Retry-After` 取较小窗口、per-anon 与 per-IP 互不串扰、无身份不限流、handler 429 不计费不触数据集）；语种检测（真实客户端从 annotations 取检测语种、fake 模式语种为空、非粤语 `zh` 置 `languageWarning` 且仍打分、粤语 `yue` 不告警、`isCantonese` 接受 `yue` 变体拒绝 `zh`/其他、`asrLang` 为 `auto`/空时请求体省略 `language` 提示、为 `yue` 时发送该提示）。合计 80 项。
+覆盖：OPTIONS/CORS、缺匿名头 403、超时长 413、presign 成功与 `assessAvailable` 各组合、local-put + dispose、跨 anon `deleted:0` 且对象保留、key 遍历（`..`）被拒、未知路由 404、错误方法 405；`/assess` 的参数校验 400、无凭据 503、跨 anon 与销毁后 404、不存在 list/download 路由；GET 签名的 stringToSign 与 verb 绑定；真实 ASR 客户端的请求体/鉴权头/base 拼接、数组内容拼接、缺凭据/无 URL/非 2xx/超时/网络失败/非 JSON 的错误映射；参考文本缓存/TTL/各类失败、返回 `jyutping`；字级相似度与 Python `difflib.SequenceMatcher` 已知结果对照；同音容错（同音不同字=100、忽略声调、不同音节不匹配、字典缺字回退、空粤拼回退）；字典加载与缺失/损坏降级；assess 同音与字级回退两路；限流（每小时/每日双窗口独立、达上限拒绝、滚动重置、被拒不延长锁定、`Retry-After` 取较小窗口、per-anon 与 per-IP 互不串扰、无身份不限流、handler 429 不计费不触数据集、单实例全局维度（轮换匿名 ID 与 IP 仍被拦、按小时滚动重置、不继承每日上限、无身份时也生效）、计数表硬上限与「淘汰不重置全局计数」）；语种检测（真实客户端从 annotations 取检测语种、fake 模式语种为空、非粤语 `zh` 置 `languageWarning` 且仍打分、粤语 `yue` 不告警、`isCantonese` 接受 `yue` 变体拒绝 `zh`/其他、`asrLang` 为 `auto`/空时请求体省略 `language` 提示、为 `yue` 时发送该提示）。合计 85 项。
 
 ## HTTP 接口
 
@@ -108,7 +109,7 @@ node --test          # 或 npm test
 
 1. 校验匿名头与描述符，按 anon 前缀重建 key（客户端永远不传 key）。
 2. 检查 `assessAvailable`，否则 `503`。
-3. **限流**：按匿名 ID 与客户端 IP 双维度、每小时 + 每日双固定窗口计数，命中上限 ⇒ `429` + `Retry-After`，**不触发付费 ASR 也不读取对象存储**；被拒的请求不推进自身计数窗口（否则重试会不断延长锁定）。
+3. **限流**：按**单实例全局**（每小时）、**匿名 ID** 与**客户端 IP**（每小时 + 每日）三个维度固定窗口计数，命中任一上限 ⇒ `429` + `Retry-After`，**不触发付费 ASR 也不读取对象存储**；被拒的请求不推进自身计数窗口（否则重试会不断延长锁定）。全局维度是唯一不受调用方掌控的一档，也是唯一能真正给 ASR 支出封顶的。计数表带硬上限：超过 2 万个身份后先淘汰日窗口已翻转的，仍超限则淘汰最早插入的（全局计数键受保护、绝不淘汰），否则客户端不断换新匿名 ID 就能把实例内存撑爆。
 4. `HEAD` 该 key（oss 后端）或 `fs.access`（local）：命中不到 ⇒ `404`，**不触发付费 ASR 调用**。
 5. **先取参考文本**（公共数据集，内存缓存 10 分钟）：缺失/为空 ⇒ 直接失败，同样不付费；绝不用空参考算分（空参考会静默得出 0 分）。
 6. 签发**仅 GET** 的短时签名 URL（TTL = `RECORDINGS_PRESIGN_TTL`）交给 ASR，函数不中转音频字节；`ASSESS_ASR=fake` 时跳过此步。
@@ -116,7 +117,9 @@ node --test          # 或 npm test
 8. **语种检测（提示性质）**：`asr_options.language` 只是提示、**不会拒绝其他语种**——普通话朗读照样被转写、并可能因字符/同音相似而得高分。故读取响应 `choices[0].message.annotations[].language`（`yue`=粤语、`zh`=普通话），当检测语种**存在且非粤语**时置 `languageWarning=true`。这是**警告而非拦截**：分数照常返回，前端另加一行「偵測到非粵語發音，建議用粵語朗讀」。检测语种缺失（离线 fake 模式、或响应无 annotations）时**不告警**，避免误伤。粤语判定见 `assess.mjs` 的 `isCantonese`（接受 `yue` 及 `yue-*`/`zh-yue` 变体）。
 9. 返回 `{score, transcript, languageWarning}`；不写回任何对象。
 
-成本控制：评分按需触发（前端不自动评分）、同一气泡在途请求单飞且成功即终态、单段 ≤60s，再加**服务端限流**（`ASSESS_RATE_HOURLY`/`ASSESS_RATE_DAILY`）兜住绕过前端单飞直接调 `/assess` 的滥用。限流状态在单实例进程内，无服务器多实例下为**尽力而为的速度带而非精确配额**，硬上限仍由云端预算告警兜底；设计取舍见 change `design.md` 的 D10。
+成本控制：评分按需触发（前端不自动评分）、同一气泡在途请求单飞且成功即终态、单段 ≤60s，再加**服务端限流**（`ASSESS_RATE_HOURLY`/`ASSESS_RATE_DAILY`/`ASSESS_RATE_GLOBAL_HOURLY`）兜住绕过前端单飞直接调 `/assess` 的滥用。限流状态在单实例进程内，无服务器多实例下为**尽力而为的速度带而非精确配额**，硬上限仍由云端预算告警兜底；设计取舍见 change `design.md` 的 D10。
+
+**未收口的成本面（已知限制）**：上传体积没有上限。`RECORDINGS_MAX_DURATION` 只校验客户端在 presign 请求里**自报**的 `durationSec`，而真正的音频是浏览器拿签名 URL **直传 OSS、不经函数**，OSS V1 的 presigned PUT 无法限制 `Content-Length`。因此匿名调用方可以声明 3 秒却上传任意大小的对象，唯一兜底是 `recordings/` 前缀的 lifecycle 过期删除（务必确认该规则真的生效）。要真正封住需把签名方式换成 `PostObject` + policy 的 `content-length-range`，属设计变更，未实施。
 
 ## CORS
 

@@ -14,8 +14,11 @@ function clock(start = 0) {
   return { now: () => t, advance: (ms) => { t += ms } }
 }
 
-function limiter({ rateHourly = 0, rateDaily = 0 } = {}, clk = clock()) {
-  return { lim: createRateLimiter({ assess: { rateHourly, rateDaily } }, { now: clk.now }), clk }
+function limiter({ rateHourly = 0, rateDaily = 0, rateGlobalHourly = 0, maxEntries } = {}, clk = clock()) {
+  const assess = { rateHourly, rateDaily, rateGlobalHourly }
+  const opts = { now: clk.now }
+  if (maxEntries !== undefined) opts.maxEntries = maxEntries
+  return { lim: createRateLimiter({ assess }, opts), clk }
 }
 
 test('no windows configured means everything passes', () => {
@@ -88,4 +91,53 @@ test('anon and IP dimensions both count toward the same request', () => {
 test('no identity means no limiting (local dev without an IP header)', () => {
   const { lim } = limiter({ rateHourly: 1 })
   for (let i = 0; i < 10; i++) assert.equal(lim.consume({}).ok, true)
+})
+
+test('the instance-wide cap holds across rotating anon ids and IPs', () => {
+  const { lim } = limiter({ rateHourly: 100, rateGlobalHourly: 3 })
+  // Both per-identity dimensions are client-controlled: anon ids are minted by
+  // the caller and X-Forwarded-For is a request header, so neither can bound cost
+  // on its own.
+  for (let i = 0; i < 3; i++) {
+    assert.equal(lim.consume({ anon: `anon-${i}`, ip: `10.0.0.${i}` }).ok, true, `request ${i}`)
+  }
+  const denied = lim.consume({ anon: 'anon-fresh', ip: '10.0.0.99' })
+  assert.equal(denied.ok, false)
+  assert.ok(denied.retryAfterSec > 0 && denied.retryAfterSec <= 3600)
+})
+
+test('the instance-wide cap resets on the hour and ignores the daily cap', () => {
+  const { lim, clk } = limiter({ rateHourly: 0, rateDaily: 1, rateGlobalHourly: 2 })
+  assert.equal(lim.consume({ anon: 'a' }).ok, true)
+  assert.equal(lim.consume({ anon: 'b' }).ok, true)
+  assert.equal(lim.consume({ anon: 'c' }).ok, false)
+  // rateDaily is 1, so if the global dimension inherited it the second request
+  // above would already have been denied on the daily window.
+  clk.advance(HOUR + 1)
+  assert.equal(lim.consume({ anon: 'd' }).ok, true, 'the global window rolled over')
+})
+
+test('the instance-wide cap applies with no client-supplied identity at all', () => {
+  const { lim } = limiter({ rateHourly: 1, rateGlobalHourly: 2 })
+  assert.equal(lim.consume({}).ok, true)
+  assert.equal(lim.consume({}).ok, true)
+  assert.equal(lim.consume({}).ok, false)
+})
+
+test('tracking is bounded when every identity is fresh and inside its window', () => {
+  const { lim } = limiter({ rateHourly: 1000, rateGlobalHourly: 1000, maxEntries: 5 }, clock(0))
+  // All requests land in the same hour and the same day, so the rollover sweep
+  // frees nothing — this is the shape that used to grow the map without bound.
+  for (let i = 0; i < 500; i++) lim.consume({ anon: `a-${i}`, ip: `10.0.${i >> 8}.${i & 255}` })
+  assert.ok(lim.size <= 5, `tracked ${lim.size} identities, expected the cap to hold`)
+})
+
+test('eviction never resets the instance-wide counter', () => {
+  const { lim } = limiter({ rateHourly: 1000, rateGlobalHourly: 4, maxEntries: 3 }, clock(0))
+  // The global key is created first, so it is the oldest entry an eviction pass
+  // would reach for; losing it would hand an attacker an unlimited budget.
+  for (let i = 0; i < 50; i++) lim.consume({ anon: `a-${i}` })
+  const denied = lim.consume({ anon: 'a-final' })
+  assert.equal(denied.ok, false, 'the global cap survived 50 evictions')
+  assert.ok(denied.retryAfterSec > 0 && denied.retryAfterSec <= 3600)
 })
