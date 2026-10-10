@@ -236,10 +236,11 @@ describe('TrialRecorder locale', () => {
     }
   })
 
-  it('renders both recorder reasons in English under the en locale', () => {
+  it('renders every recorder reason in English under the en locale', () => {
     const cases: [RecorderErrorReason, string][] = [
       ['unsupportedFormat', 'This browser supports no recording format'],
       ['micDenied', 'Cannot access the microphone — check the permission'],
+      ['noAudio', "No audio was picked up — check this browser's microphone access in your system settings"],
     ]
     for (const [reason, expected] of cases) {
       const view = render(recL(api({ error: reason })))
@@ -247,6 +248,17 @@ describe('TrialRecorder locale', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(expected)
       view.unmount()
     }
+  })
+
+  it('re-translates a recorder toast already on screen when the locale changes', () => {
+    render(recL(api({ error: 'noAudio' })))
+    expect(screen.getByRole('alert')).toHaveTextContent('未錄到聲音，請檢查系統給瀏覽器的麥克風權限')
+
+    fireEvent.click(screen.getByRole('button', { name: 'to-en' }))
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      "No audio was picked up — check this browser's microphone access",
+    )
+    expect(screen.queryByText('未錄到聲音，請檢查系統給瀏覽器的麥克風權限')).not.toBeInTheDocument()
   })
 
   it('re-translates a scoring failure already displayed in the bubble', () => {

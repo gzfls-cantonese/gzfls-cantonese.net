@@ -37,6 +37,67 @@ export interface RecordingResult {
   blob: Blob
   mime: string
   durationSec: number
+  /** True when the input level never left zero while the meter was running. */
+  silent: boolean
+}
+
+/** Byte-domain excursion around the centre line that still counts as silence. */
+const SILENT_PEAK = 1
+const LEVEL_INTERVAL_MS = 100
+
+interface LevelReader {
+  peak(): number
+  reads(): number
+  dispose(): void
+}
+
+/**
+ * Watches the live input level so a dead capture is caught before it costs
+ * anything. macOS can hand a browser a microphone track that records normally
+ * but carries no signal — the clip plays back silent and the ASR answers with an
+ * empty transcript. Sampling the track answers "did the mic deliver anything"
+ * without a paid round trip. Returns null where nothing can be measured (no
+ * AudioContext, or a stream that cannot be attached), which never blocks a
+ * recording: an unmeasured clip is simply judged by the old rules.
+ */
+function createLevelReader(stream: MediaStream): LevelReader | null {
+  if (typeof AudioContext === 'undefined') return null
+  let ctx: AudioContext | null = null
+  try {
+    ctx = new AudioContext()
+    const analyser = ctx.createAnalyser()
+    analyser.fftSize = 2048
+    // Source into analyser only: monitoring must not reach the destination, or
+    // the mic would feed back through the speaker.
+    ctx.createMediaStreamSource(stream).connect(analyser)
+    const buf = new Uint8Array(analyser.fftSize)
+    let peak = 0
+    let reads = 0
+    // A suspended context yields flat frames, which would read as silence, so
+    // only sample while it is actually running.
+    void ctx.resume().catch(() => {})
+    const timer = setInterval(() => {
+      if (ctx?.state !== 'running') return
+      analyser.getByteTimeDomainData(buf)
+      reads += 1
+      for (const value of buf) {
+        const excursion = Math.abs(value - 128)
+        if (excursion > peak) peak = excursion
+      }
+    }, LEVEL_INTERVAL_MS)
+    const running = ctx
+    return {
+      peak: () => peak,
+      reads: () => reads,
+      dispose: () => {
+        clearInterval(timer)
+        void running.close().catch(() => {})
+      },
+    }
+  } catch {
+    ctx?.close().catch(() => {})
+    return null
+  }
 }
 
 /**
@@ -48,6 +109,8 @@ export interface RecordingResult {
 export class RecordSession {
   private rec: MediaRecorder | null = null
   private stream: MediaStream | null = null
+  private level: LevelReader | null = null
+  private systemMuted = false
   private chunks: BlobPart[] = []
   private startedAt = 0
   private timer: ReturnType<typeof setTimeout> | null = null
@@ -59,10 +122,19 @@ export class RecordSession {
     private readonly maxSec: number = MAX_RECORD_SEC,
   ) {}
 
+  /** The system muted the microphone before any signal arrived. */
+  get mutedBySystem(): boolean {
+    return this.systemMuted
+  }
+
   async start(): Promise<void> {
     this.stream = await navigator.mediaDevices.getUserMedia({ audio: true })
     this.chunks = []
     this.done = false
+    this.systemMuted = false
+    this.level = createLevelReader(this.stream)
+    const [track] = this.stream.getAudioTracks?.() ?? []
+    track?.addEventListener?.('mute', this.onTrackMute)
     const rec = new MediaRecorder(this.stream, { mimeType: this.mime })
     rec.ondataavailable = (e: BlobEvent) => {
       if (e.data && e.data.size > 0) this.chunks.push(e.data)
@@ -71,6 +143,17 @@ export class RecordSession {
     this.startedAt = Date.now()
     rec.start()
     this.timer = setTimeout(() => this.onAutoStop?.(), this.maxSec * 1000)
+  }
+
+  /**
+   * A mute while nothing has been captured yet means the clip can only come out
+   * silent, so end the press immediately and let the caller say so. A mute after
+   * real audio is a device switch — keep recording.
+   */
+  private onTrackMute = () => {
+    if (!this.level || this.level.peak() > SILENT_PEAK) return
+    this.systemMuted = true
+    this.onAutoStop?.()
   }
 
   async stop(): Promise<RecordingResult | null> {
@@ -90,12 +173,15 @@ export class RecordSession {
       rec.onstop = () => resolve(new Blob(this.chunks, { type: this.mime }))
       rec.stop()
     })
+    const silent = (this.level?.reads() ?? 0) > 0 && this.level!.peak() <= SILENT_PEAK
     this.release()
     if (!blob.size) return null
-    return { blob, mime: this.mime, durationSec }
+    return { blob, mime: this.mime, durationSec, silent }
   }
 
   private release(): void {
+    this.level?.dispose()
+    this.level = null
     this.stream?.getTracks().forEach((t) => t.stop())
     this.stream = null
     this.rec = null

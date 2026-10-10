@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 
+/** Drives what the captured clip looks like: silent, or nothing at all. */
+const capture = { silent: false, mutedBySystem: false, noBlob: false }
+
 vi.mock('./recorder', () => ({
   MAX_RECORD_SEC: 60,
   MIME_CHAIN: ['audio/opus'],
@@ -12,9 +15,18 @@ vi.mock('./recorder', () => ({
       public mime: string,
       public onAutoStop?: () => void,
     ) {}
+    get mutedBySystem() {
+      return capture.mutedBySystem
+    }
     async start() {}
     async stop() {
-      return { blob: new Blob(['rec'], { type: 'audio/opus' }), mime: 'audio/opus', durationSec: 3 }
+      if (capture.noBlob) return null
+      return {
+        blob: new Blob(['rec'], { type: 'audio/opus' }),
+        mime: 'audio/opus',
+        durationSec: 3,
+        silent: capture.silent,
+      }
     }
   },
 }))
@@ -50,6 +62,9 @@ const baseProps = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  capture.silent = false
+  capture.mutedBySystem = false
+  capture.noBlob = false
   globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock') as never
   globalThis.URL.revokeObjectURL = vi.fn() as never
   HTMLMediaElement.prototype.play = vi.fn(() => Promise.resolve()) as never
@@ -137,6 +152,43 @@ describe('useTrialRecord', () => {
     const { result } = renderHook(() => useTrialRecord({ ...baseProps, enabled: false }))
     expect(result.current.supported).toBe(false)
     act(() => result.current.begin())
+    expect(result.current.phase).toBe('idle')
+  })
+
+  it('drops a silent capture without uploading it, so no ASR call is billed', async () => {
+    capture.silent = true
+    const { result } = renderHook(() => useTrialRecord(baseProps))
+    act(() => result.current.begin())
+    await act(async () => {
+      await result.current.end()
+    })
+    expect(result.current.error).toBe('noAudio')
+    expect(result.current.phase).toBe('idle')
+    expect(result.current.bubble).toBeNull()
+    expect(enqueueUpload).not.toHaveBeenCalled()
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+  })
+
+  it('names the dead microphone when the system muted before any frame', async () => {
+    capture.noBlob = true
+    capture.mutedBySystem = true
+    const { result } = renderHook(() => useTrialRecord(baseProps))
+    act(() => result.current.begin())
+    await act(async () => {
+      await result.current.end()
+    })
+    expect(result.current.error).toBe('noAudio')
+    expect(result.current.phase).toBe('idle')
+  })
+
+  it('says nothing about a tap too short to capture a frame', async () => {
+    capture.noBlob = true
+    const { result } = renderHook(() => useTrialRecord(baseProps))
+    act(() => result.current.begin())
+    await act(async () => {
+      await result.current.end()
+    })
+    expect(result.current.error).toBeNull()
     expect(result.current.phase).toBe('idle')
   })
 })

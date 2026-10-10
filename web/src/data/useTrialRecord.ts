@@ -45,7 +45,7 @@ export type AssessErrorReason =
   | 'serviceUnavailable'
   | 'unknown'
 
-export type RecorderErrorReason = 'unsupportedFormat' | 'micDenied'
+export type RecorderErrorReason = 'unsupportedFormat' | 'micDenied' | 'noAudio'
 
 export type TrialErrorReason = AssessErrorReason | RecorderErrorReason
 
@@ -220,6 +220,17 @@ export function useTrialRecord({
     const result: RecordingResult | null = await session.stop().catch(() => null)
     sessionRef.current = null
     if (!result) {
+      // Only the system-mute path explains itself here; a tap too short to
+      // produce a frame is indistinguishable from a mis-press and stays silent.
+      if (session.mutedBySystem) setError('noAudio')
+      setPhase('idle')
+      return
+    }
+    if (result.silent) {
+      // Nothing reached the microphone: uploading would pay for an ASR call that
+      // can only answer with an empty transcript, and the bubble would play back
+      // as silence, so stop before the upload and point at the permission.
+      setError('noAudio')
       setPhase('idle')
       return
     }
