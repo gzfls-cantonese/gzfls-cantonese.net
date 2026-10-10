@@ -89,6 +89,58 @@ describe('enqueueUpload', () => {
     expect(calls[1]).toBe('http://rec.test/local-put/recordings/a.opus')
   })
 
+  it('PUTs to an absolute https uploadUrl verbatim', async () => {
+    const calls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String((input as Request).url ?? input)
+      calls.push(url)
+      if (url.endsWith('/presign-upload')) {
+        return json({
+          recId: 'r2',
+          uploadUrl: 'https://bucket.oss.example/recordings/a.opus?sig=1',
+          key: 'recordings/a.opus',
+        })
+      }
+      return new Response(null, { status: 200 })
+    })
+    const handle = enqueueUpload(
+      { episode: 1, entryId: 'e1', durationSec: 3, mime: 'audio/opus' },
+      new Blob(['x']),
+    )
+    await expect(handle.promise).resolves.toMatchObject({ ref: { recId: 'r2' } })
+    expect(calls[1]).toBe('https://bucket.oss.example/recordings/a.opus?sig=1')
+  })
+
+  it('refuses to hand the recording to a non-https uploadUrl', async () => {
+    vi.useFakeTimers()
+    for (const bad of [
+      'http://bucket.oss.example/recordings/a.opus',
+      '//evil.example/recordings/a.opus',
+      'javascript:alert(1)',
+    ]) {
+      const calls: string[] = []
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+        const url = String((input as Request).url ?? input)
+        calls.push(url)
+        if (url.endsWith('/presign-upload')) return json({ recId: 'r3', uploadUrl: bad, key: 'k.opus' })
+        return new Response(null, { status: 200 })
+      })
+      const handle = enqueueUpload(
+        { episode: 1, entryId: 'e1', durationSec: 3, mime: 'audio/opus' },
+        new Blob(['x']),
+      )
+      const settled = handle.promise.then(
+        () => null,
+        (err: Error) => err.message,
+      )
+      await vi.runAllTimersAsync()
+      expect(await settled).toBe('refusing a non-https upload url')
+      // Presign was retried; the PUT to the hostile URL never happened.
+      expect(calls.length).toBeGreaterThan(0)
+      expect(calls.every((u) => u === 'http://rec.test/presign-upload')).toBe(true)
+    }
+  })
+
   it('retries a failed upload then succeeds (bounded backoff)', async () => {
     vi.useFakeTimers()
     let puts = 0

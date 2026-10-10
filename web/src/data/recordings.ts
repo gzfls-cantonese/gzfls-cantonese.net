@@ -94,9 +94,19 @@ function apiUrl(path: string): string {
   return `${RECORDINGS_API}${path}`
 }
 
-/** A presigned uploadUrl may be root-relative (local backend) or absolute (OSS). */
+/**
+ * A presigned uploadUrl may be root-relative (local backend) or absolute (OSS).
+ * The recording is personal data, so an absolute URL has to be https — the OSS
+ * signer only ever emits https, and anything else means the response was tampered
+ * with and must not be handed our audio. `//host` is refused too: with no
+ * RECORDINGS_API it would resolve against the attacker's host, not ours.
+ */
 function resolveUploadUrl(uploadUrl: string): string {
-  return /^https?:\/\//i.test(uploadUrl) ? uploadUrl : `${RECORDINGS_API ?? ''}${uploadUrl}`
+  if (/^https:\/\//i.test(uploadUrl)) return uploadUrl
+  if (/^[a-z][a-z0-9+.-]*:/i.test(uploadUrl) || uploadUrl.startsWith('//')) {
+    throw new Error('refusing a non-https upload url')
+  }
+  return `${RECORDINGS_API ?? ''}${uploadUrl}`
 }
 
 /** A non-2xx response, carrying the status and the server's own reason. */
