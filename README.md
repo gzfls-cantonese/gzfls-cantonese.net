@@ -9,14 +9,21 @@ The gzfls-cantonese.net website — 面向中国高中生、基于《三国演�
 
 ## 目录
 
-- `CanCLID/zoengjyutgaai/` — 原始 parquet 数据集（不入库分发，仅本地构建用）。
-- `tools/pipeline/` — 构建期抽取脚本（parquet → 静态音频/索引制品）。
+- `CanCLID/zoengjyutgaai/` — 原始 parquet 数据集（约 2.5 GB，不入库，用 `tools/pipeline/fetch-dataset.sh` 获取）。
+- `tools/pipeline/` — 数据获取与构建期抽取脚本（parquet → 静态音频/索引制品）。
 - `dist-assets/` — 生成的静态制品（gitignore，上传至 OSS/CDN）。
 - `web/` — React + Vite + TypeScript 前端。
 
 ## 构建数据制品
 
 ```bash
+# 1. 取源数据：5 个 parquet 共约 2.5 GB，按 tools/pipeline/dataset.sha256 校验，
+#    已存在且校验通过的分片会跳过，中断后重跑只补缺失的部分。
+#    大陆访问 huggingface.co 通常不通，走镜像：
+HF_ENDPOINT=https://hf-mirror.com tools/pipeline/fetch-dataset.sh
+tools/pipeline/fetch-dataset.sh --check      # 只校验本地分片，不下载
+
+# 2. 抽取为静态制品
 pip install -r tools/pipeline/requirements.txt
 python3 tools/pipeline/extract.py --src CanCLID/zoengjyutgaai --out dist-assets
 ```

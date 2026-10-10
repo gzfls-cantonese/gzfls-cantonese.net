@@ -47,10 +47,13 @@ oss://<BUCKET>/<PREFIX>/CURRENT      # 本次部署版本标记
 3. **AccessKey**：建 RAM 子账号，授权对该 Bucket 的读写；取得 `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET`。
 4. **本地数据制品**：确保 `dist-assets/` 已生成；未生成先跑：
    ```bash
+   # 源数据（5 个 parquet 约 2.5 GB，CC0，不入库）：按 sha256 校验后落盘，可断点续传
+   HF_ENDPOINT=https://hf-mirror.com tools/pipeline/fetch-dataset.sh
+
    pip install -r tools/pipeline/requirements.txt
    python3 tools/pipeline/extract.py --src CanCLID/zoengjyutgaai --out dist-assets
    ```
-   （`dist-assets/` 为构建产物，已 gitignore，不入库；源数据来自 HuggingFace CC0 数据集，本地一次性下载。）
+   （`dist-assets/` 为构建产物，已 gitignore，不入库。源数据来自 HuggingFace CC0 数据集 `CanCLID/zoengjyutgaai`，校验和见 `tools/pipeline/dataset.sha256`；大陆直连 huggingface.co 通常不通，故上面用 `HF_ENDPOINT` 指向镜像。已下载过可用 `tools/pipeline/fetch-dataset.sh --check` 只校验不下载。）
 
 ---
 

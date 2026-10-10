@@ -162,3 +162,7 @@ ossutil_output/
 # Python bytecode
 __pycache__/
 *.pyc
+# Kept in-repo rather than left to a machine-global ignore, so a fresh clone on
+# another laptop does not show these as untracked.
+.DS_Store
+.pytest_cache/

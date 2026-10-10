@@ -34,3 +34,19 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server/recordings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # No install step: the function has zero npm dependencies, so `node --test`
+      # runs straight off the checkout.
+      - name: Unit tests
+        run: npm test
