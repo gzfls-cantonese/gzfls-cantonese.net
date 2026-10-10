@@ -3,8 +3,8 @@
 
 Reads every parquet under --src, writes each record's OPUS audio to a per-episode
 directory, and emits a per-episode JSON index plus a global manifest. Runs an
-integrity check (157 contiguous episodes, record count == source rows) and exits
-non-zero with details when it fails.
+integrity check (157 contiguous episodes, record count == source rows, no record
+skipped for an unsafe path) and exits non-zero with details when it fails.
 
 Output layout (under --out):
   audio/<NNN>/<NNN>_<MMM>.opus
@@ -16,6 +16,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 from collections import defaultdict
 
@@ -23,6 +24,27 @@ import pyarrow.parquet as pq
 from pyjyutping.jyutping import convert as _jp_convert
 
 EXPECTED_EPISODES = 157
+
+# The dataset's own layout: a flat `<NNN>_<MMM>.opus` name, no directories.
+SAFE_AUDIO_NAME = re.compile(r"[A-Za-z0-9_.-]+\.opus")
+
+
+def valid_episode(n):
+    """True when n can be formatted as one of the 157 episode directories."""
+    return isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= EXPECTED_EPISODES
+
+
+def safe_audio_name(apath):
+    """Return `apath` unchanged, or None if it is not a plain filename.
+
+    `audio.path` and `id` both come out of the parquet, so a value like
+    `../../x` — or an absolute path, which makes os.path.join discard the
+    destination directory entirely — would write outside the output tree.
+    """
+    name = str(apath)
+    if os.path.basename(name) != name or not SAFE_AUDIO_NAME.fullmatch(name):
+        return None
+    return name
 
 
 def to_jyutping(text):
@@ -103,6 +125,7 @@ def main():
     episodes_root = os.path.join(args.out, "episodes")
     os.makedirs(audio_root, exist_ok=True)
     os.makedirs(episodes_root, exist_ok=True)
+    real_audio_root = os.path.realpath(audio_root)
 
     # episode_id -> list of entries (kept in memory; text only, no audio bytes)
     episodes = defaultdict(list)
@@ -110,6 +133,7 @@ def main():
     written_audio = 0
     total_duration = 0.0
     bad_audio = []
+    bad_rows = []
 
     for fp in files:
         pf = pq.ParquetFile(fp)
@@ -123,7 +147,15 @@ def main():
                 dur = data["audio_duration"][i]
                 text = data["transcription"][i]
                 audio = data["audio"][i] or {}
-                apath = audio.get("path") or f"{ep_dir(ep)}_{rid}.opus"
+
+                if not valid_episode(ep):
+                    bad_rows.append(f"episode id {ep!r} (record {rid!r})")
+                    continue
+                raw_path = audio.get("path") or f"{ep_dir(ep)}_{rid}.opus"
+                name = safe_audio_name(raw_path)
+                if name is None:
+                    bad_rows.append(f"unsafe audio path {raw_path!r} (record {rid!r})")
+                    continue
 
                 if args.limit_episodes and ep > args.limit_episodes:
                     continue
@@ -133,13 +165,18 @@ def main():
                     if not abytes:
                         bad_audio.append(rid)
                     else:
-                        dest_dir = os.path.join(audio_root, ep_dir(ep))
-                        os.makedirs(dest_dir, exist_ok=True)
-                        with open(os.path.join(dest_dir, apath), "wb") as f:
+                        dest = os.path.join(audio_root, ep_dir(ep), name)
+                        # `name` is already a validated flat filename, so this only
+                        # trips when the output tree itself is symlinked elsewhere.
+                        if not os.path.realpath(dest).startswith(real_audio_root + os.sep):
+                            bad_rows.append(f"{dest} resolves outside {audio_root}")
+                            continue
+                        os.makedirs(os.path.dirname(dest), exist_ok=True)
+                        with open(dest, "wb") as f:
                             f.write(abytes)
                         written_audio += 1
 
-                rel = f"audio/{ep_dir(ep)}/{apath}"
+                rel = f"audio/{ep_dir(ep)}/{name}"
                 episodes[ep].append({
                     "id": rid,
                     "duration": round(dur, 3) if dur is not None else None,
@@ -206,6 +243,9 @@ def main():
             errors.append(f"record count {processed_records} != source rows {source_rows}")
     if bad_audio:
         errors.append(f"{len(bad_audio)} records had empty audio bytes, e.g. {bad_audio[:5]}")
+    if bad_rows:
+        errors.append(f"{len(bad_rows)} records were skipped as unsafe, e.g. {bad_rows[:5]}"
+                      f"{'...' if len(bad_rows) > 5 else ''}")
     if missing_titles:
         errors.append(f"{len(missing_titles)} processed episodes missing a title entry in "
                       f"{args.titles}: {missing_titles[:20]}"
