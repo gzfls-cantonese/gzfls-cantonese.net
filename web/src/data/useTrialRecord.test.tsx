@@ -246,22 +246,22 @@ describe('useTrialRecord scoring', () => {
     })
   })
 
-  it('maps server failures, a disposed recording and a timeout to readable messages', async () => {
+  it('classifies server failures, a disposed recording and a timeout into reason codes', async () => {
     const cases: Array<[unknown, string]> = [
-      [new RecordingsError('recordings /assess failed (503): scoring unavailable', 503, 'scoring unavailable'), '評分服務未啟用'],
-      [new RecordingsError('recordings /assess failed (429): rate limited', 429, 'rate limited'), '評分太頻繁，請稍後再試'],
-      [new RecordingsError('recordings /assess failed (404)', 404, ''), '錄音已銷毀，無法評分'],
-      [Object.assign(new Error('Timed out'), { name: 'TimeoutError' }), '評分逾時，請稍後再試'],
-      [new TypeError('network'), '評分失敗，請稍後再試'],
+      [new RecordingsError('recordings /assess failed (503): scoring unavailable', 503, 'scoring unavailable'), 'scoringUnavailable'],
+      [new RecordingsError('recordings /assess failed (429): rate limited', 429, 'rate limited'), 'rateLimited'],
+      [new RecordingsError('recordings /assess failed (404)', 404, ''), 'destroyed'],
+      [Object.assign(new Error('Timed out'), { name: 'TimeoutError' }), 'timeout'],
+      [new TypeError('network'), 'unknown'],
     ]
-    for (const [err, message] of cases) {
+    for (const [err, reason] of cases) {
       vi.mocked(assessRecording).mockRejectedValueOnce(err as never)
       const { result, unmount } = await recorded()
       await act(async () => {
         result.current.assess()
       })
       await flush()
-      expect(result.current.bubble?.assessment).toEqual({ status: 'failed', error: message })
+      expect(result.current.bubble?.assessment).toEqual({ status: 'failed', reason })
       // Failure must not break local playback.
       act(() => result.current.toggleBubble())
       expect(result.current.bubblePlaying).toBe(true)

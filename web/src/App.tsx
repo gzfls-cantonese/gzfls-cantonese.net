@@ -1,4 +1,5 @@
 import { Route, Routes } from 'react-router-dom'
+import { useLocale } from './i18n/locale'
 import Layout from './ui/Layout'
 import HomePage from './ui/HomePage'
 import EpisodePage from './ui/EpisodePage'
@@ -20,10 +21,11 @@ export default function App() {
 }
 
 function NotFound() {
+  const { t } = useLocale()
   return (
     <div className="page center">
-      <h2>頁面不存在</h2>
-      <p>返回首頁繼續聽評書。</p>
+      <h2>{t('notFound.title')}</h2>
+      <p>{t('notFound.body')}</p>
     </div>
   )
 }

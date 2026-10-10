@@ -1,4 +1,5 @@
 import logoUrl from '../assets/logo.svg'
+import { useLocale } from '../i18n/locale'
 
 interface LogoProps {
   className?: string
@@ -12,13 +13,16 @@ interface LogoProps {
  * web/public/favicon.svg carries the same baked paths.
  */
 export default function Logo({ className, size = 40 }: LogoProps) {
+  // The mark spells the site title, so its accessible name is the localized
+  // title rather than a separate string that could drift from it.
+  const { t } = useLocale()
   return (
     <img
       className={className}
       src={logoUrl}
       width={size}
       height={size}
-      alt="品三國 · 識粵語"
+      alt={t('doc.title')}
     />
   )
 }

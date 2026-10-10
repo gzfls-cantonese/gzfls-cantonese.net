@@ -87,12 +87,114 @@ code {
 .brand-text {
   font-weight: 700;
   letter-spacing: 1px;
+  white-space: nowrap;
 }
 
 .nav {
   display: flex;
+  align-items: center;
   gap: 16px;
   font-size: 14px;
+}
+
+/* Header items must not be squeezed into two lines by flex-shrink; if the row
+   ever runs out of space it should overflow visibly instead of mangling. */
+.nav > a {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Locale switcher — a globe + chevron disclosing both locales by their native
+   names, so a visitor who cannot read the current locale can still recognise
+   theirs. Kept compact because the header has to share one row with the brand
+   and both nav links down to 320px. */
+.locale-switch {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+}
+
+.locale-switch__btn {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  line-height: 0;
+  cursor: pointer;
+}
+
+.locale-switch__btn[aria-expanded='true'] {
+  border-color: var(--brand-strong);
+  color: var(--brand-strong);
+}
+
+/* The trigger inherits line-height: 0 from the button, so the abbreviation
+   needs its own box. */
+.locale-switch__abbr {
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.locale-switch__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 116px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.locale-switch__opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.locale-switch__opt:hover {
+  background: var(--bg);
+}
+
+/* Marker dot, present but transparent on the inactive option so both labels
+   stay left-aligned. */
+.locale-switch__opt::before {
+  content: '';
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.locale-switch__opt[aria-current='true'] {
+  color: var(--brand-strong);
+  font-weight: 600;
+}
+
+.locale-switch__opt[aria-current='true']::before {
+  background: var(--brand-strong);
 }
 
 /* Main / page */
@@ -164,18 +266,23 @@ code {
   white-space: nowrap;
 }
 
+/* The English title is a full sentence rather than a 15em compound, so the
+   CJK nowrap scaling above would shrink it to unreadable sizes. Let it wrap
+   over two lines instead. `lang` tracks the active locale via LocaleProvider.
+   Slope is pinned to the narrowest phone: the string measures 40.8em, so at a
+   320px viewport (280px of hero) anything above 13px breaks it onto three
+   lines. 4vw stays under that at 320 and lands at 15px/375, 17.2px/430 — the
+   largest sizes that still hold two lines at each width. */
+html[lang='en'] .hero h1 {
+  font-size: clamp(13px, 4vw, 21px);
+  line-height: 1.3;
+  white-space: normal;
+}
+
 .hero__sub {
   margin: 0;
   color: var(--ink-soft);
   font-size: 14px;
-}
-
-.hero__sub-line {
-  display: block;
-}
-
-.hero__sub-line + .hero__sub-line {
-  margin-top: 2px;
 }
 
 /* Home: title / scrolling episode list / source, filling the viewport */
@@ -242,6 +349,24 @@ code {
 /* Narrow phones: stack the two source lines tightly so the footer stays short
    and never mid-wraps into a third line. */
 @media (max-width: 430px) {
+  /* English nav labels are materially wider than their Chinese originals, so the
+     header tightens to keep the brand, both links, and the locale switcher on one
+     line down to 320px. */
+  .app-header {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .brand-text {
+    font-size: 14px;
+    letter-spacing: 0;
+  }
+
+  .nav {
+    gap: 10px;
+    font-size: 13px;
+  }
+
   .home__source {
     flex-direction: column;
     align-items: center;
@@ -249,6 +374,15 @@ code {
     padding-top: 8px;
     font-size: 10px;
     line-height: 1.3;
+  }
+}
+
+/* Below 360px the English wordmark no longer fits beside the nav links and the
+   locale switcher, so only the baked logo mark remains. `lang` tracks the active
+   locale via LocaleProvider, which is what scopes this to English. */
+@media (max-width: 360px) {
+  html[lang='en'] .brand-text {
+    display: none;
   }
 }
 
@@ -330,7 +464,9 @@ code {
 }
 
 .ep-card__meta {
-  font-size: 12px;
+  /* 11px rather than 12px so the widest English line ("308 segments, 28 min",
+     117.7px) still fits the 126px a two-column card allows at a 375px viewport. */
+  font-size: 11px;
   color: var(--muted);
 }
 

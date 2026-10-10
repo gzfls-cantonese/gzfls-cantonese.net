@@ -20,7 +20,7 @@ describe('loadManifest', () => {
     await expect(loadManifest()).resolves.toMatchObject({ episodeCount: 157 })
   })
 
-  it('throws DataError with status on a non-ok response', async () => {
+  it('throws a DataError with reason http and the status on a non-ok response', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response('nope', { status: 404 }),
     )
@@ -31,19 +31,48 @@ describe('loadManifest', () => {
       err = e as DataError
     }
     expect(err).toBeInstanceOf(DataError)
+    expect(err?.reason).toBe('http')
     expect(err?.status).toBe(404)
   })
 
-  it('throws DataError on a network failure', async () => {
+  it('throws a DataError with reason network on a network failure', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new TypeError('failed to fetch'))
-    await expect(loadManifest()).rejects.toThrow(/网络错误/)
+    let err: DataError | undefined
+    try {
+      await loadManifest()
+    } catch (e) {
+      err = e as DataError
+    }
+    expect(err).toBeInstanceOf(DataError)
+    expect(err?.reason).toBe('network')
   })
 
-  it('throws DataError on invalid JSON', async () => {
+  it('throws a DataError with reason parse on invalid JSON', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response('<html>', { status: 200, headers: { 'Content-Type': 'application/json' } }),
     )
-    await expect(loadManifest()).rejects.toThrow(/JSON/)
+    let err: DataError | undefined
+    try {
+      await loadManifest()
+    } catch (e) {
+      err = e as DataError
+    }
+    expect(err).toBeInstanceOf(DataError)
+    expect(err?.reason).toBe('parse')
+  })
+
+  it('keeps message a locale-independent diagnostic carrying the URL and status', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response('nope', { status: 503 }),
+    )
+    let err: DataError | undefined
+    try {
+      await loadManifest()
+    } catch (e) {
+      err = e as DataError
+    }
+    expect(err?.message).toContain('503')
+    expect(err?.message).toContain('manifest.json')
   })
 })
 

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { episodeCoverUrl } from '../data/api'
+import { useLocale } from '../i18n/locale'
 
 interface Props {
   cover: string
@@ -9,16 +10,20 @@ interface Props {
 
 /**
  * Episode cover with lazy loading and a graceful placeholder fallback.
- * Real 小人书 illustrations are pending licensing, so the cover path may 404;
+ * Real 小人書 illustrations are pending licensing, so the cover path may 404;
  * we always fall back to an inline placeholder that keeps the layout intact.
  */
 export default function CoverImage({ cover, episode, className }: Props) {
   const [failed, setFailed] = useState(false)
+  const { t } = useLocale()
 
   if (failed) {
     return (
-      <div className={`cover cover--placeholder ${className ?? ''}`} aria-label={`第 ${episode} 集封面`}>
-        <span className="cover__ep">第{episode}集</span>
+      <div
+        className={`cover cover--placeholder ${className ?? ''}`}
+        aria-label={t('cover.placeholderLabel', { episode })}
+      >
+        <span className="cover__ep">{t('cover.episodeBadge', { episode })}</span>
       </div>
     )
   }
@@ -27,7 +32,7 @@ export default function CoverImage({ cover, episode, className }: Props) {
     <img
       className={`cover ${className ?? ''}`}
       src={episodeCoverUrl(cover)}
-      alt={`第 ${episode} 集《三國演義》封面`}
+      alt={t('cover.alt', { episode })}
       loading="lazy"
       decoding="async"
       onError={() => setFailed(true)}

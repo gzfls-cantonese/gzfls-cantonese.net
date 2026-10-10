@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { useLocale } from '../i18n/locale'
 import type { ScriptEntry } from '../data/types'
 
 interface Props {
@@ -50,6 +51,7 @@ export default function ScriptPanel({ entries, currentIndex, onSelect }: Props) 
   const parentRef = useRef<HTMLDivElement>(null)
   const autoRef = useRef(true)
   const [showJyutping, setShowJyutping] = useState(true)
+  const { t } = useLocale()
 
   const virtualizer = useVirtualizer({
     count: entries.length,
@@ -91,14 +93,14 @@ export default function ScriptPanel({ entries, currentIndex, onSelect }: Props) 
   return (
     <div className="script-wrap">
       <div className="script-toolbar">
-        <span className="script-hint">可滾屏和點擊跳轉</span>
+        <span className="script-hint">{t('script.hint')}</span>
         <label className="script-toggle">
           <input
             type="checkbox"
             checked={showJyutping}
             onChange={(e) => setShowJyutping(e.target.checked)}
           />
-          <span>顯示粵拼Jyutping</span>
+          <span>{t('script.jyutpingToggle')}</span>
         </label>
       </div>
       <div className="script" ref={parentRef}>

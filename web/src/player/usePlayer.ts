@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { episodeAudioUrl } from '../data/api'
+import { useLocale } from '../i18n/locale'
 import type { ScriptEntry } from '../data/types'
 
 export type PlayerStatus = 'idle' | 'playing' | 'paused' | 'ended' | 'error'
@@ -32,6 +33,7 @@ const MAX_CONSECUTIVE_ERRORS = 5
  * controls. Degrades gracefully where Media Session is unsupported.
  */
 export function usePlayer({ episode, entries, episodeTitle }: Options): PlayerState {
+  const { t } = useLocale()
   const elsRef = useRef<[HTMLAudioElement | null, HTMLAudioElement | null]>([null, null])
   const slotRef = useRef(0)
   const indexRef = useRef(0)
@@ -223,9 +225,9 @@ export function usePlayer({ episode, entries, episodeTitle }: Options): PlayerSt
     const entry = entriesRef.current[currentIndex]
     try {
       ms.metadata = new MediaMetadata({
-        title: entry ? `${entry.id}` : '三國演義粵語評書',
-        artist: episodeTitle ?? `第 ${episode} 集`,
-        album: '三國演義 · 粵語評書',
+        title: entry ? `${entry.id}` : t('player.mediaFallbackTitle'),
+        artist: episodeTitle ?? t('ep.number', { episode }),
+        album: t('player.mediaAlbum'),
       })
       ms.playbackState = status === 'playing' ? 'playing' : status === 'paused' ? 'paused' : 'none'
       ms.setActionHandler('play', () => play())
@@ -245,7 +247,7 @@ export function usePlayer({ episode, entries, episodeTitle }: Options): PlayerSt
         /* noop */
       }
     }
-  }, [currentIndex, status, episode, episodeTitle, play, pause, prev, next])
+  }, [currentIndex, status, episode, episodeTitle, play, pause, prev, next, t])
 
   return { currentIndex, status, errorEntryId, play, pause, toggle, next, prev, seekTo }
 }

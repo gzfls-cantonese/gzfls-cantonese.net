@@ -32,11 +32,21 @@ export type TrialPhase = 'idle' | 'holding' | 'recorded'
 
 export type AssessStatus = 'idle' | 'loading' | 'scored' | 'failed'
 
+/**
+ * Failure causes travel as codes and are resolved to visitor-facing text at
+ * render time, so a message already on screen re-translates on a locale switch.
+ */
+export type AssessErrorReason = 'scoringUnavailable' | 'rateLimited' | 'destroyed' | 'timeout' | 'unknown'
+
+export type RecorderErrorReason = 'unsupportedFormat' | 'micDenied'
+
+export type TrialErrorReason = AssessErrorReason | RecorderErrorReason
+
 export interface TrialAssessment {
   status: AssessStatus
   score?: number
   transcript?: string
-  error?: string
+  reason?: AssessErrorReason
   /** Set on a scored result when the ASR detected a non-Cantonese reading. */
   languageWarning?: boolean
 }
@@ -56,7 +66,7 @@ export interface TrialRecordApi {
   phase: TrialPhase
   bubble: TrialBubble | null
   bubblePlaying: boolean
-  error: string | null
+  error: TrialErrorReason | null
   /** Long-press start. */
   begin: () => void
   /** Release (also fired by the duration cap and pointercancel). */
@@ -87,14 +97,14 @@ const ASSESS_TIMEOUT_MS = 30_000
 
 const IDLE_ASSESSMENT: TrialAssessment = { status: 'idle' }
 
-function assessErrorMessage(err: unknown): string {
+function assessErrorReason(err: unknown): AssessErrorReason {
   if (err instanceof RecordingsError) {
-    if (err.status === 503 && err.reason === 'scoring unavailable') return '評分服務未啟用'
-    if (err.status === 429) return '評分太頻繁，請稍後再試'
-    if (err.status === 404) return '錄音已銷毀，無法評分'
+    if (err.status === 503 && err.reason === 'scoring unavailable') return 'scoringUnavailable'
+    if (err.status === 429) return 'rateLimited'
+    if (err.status === 404) return 'destroyed'
   }
-  if ((err as Error)?.name === 'TimeoutError') return '評分逾時，請稍後再試'
-  return '評分失敗，請稍後再試'
+  if ((err as Error)?.name === 'TimeoutError') return 'timeout'
+  return 'unknown'
 }
 
 export function useTrialRecord({
@@ -108,7 +118,7 @@ export function useTrialRecord({
   const [phase, setPhase] = useState<TrialPhase>('idle')
   const [bubble, setBubble] = useState<TrialBubble | null>(null)
   const [bubblePlaying, setBubblePlaying] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<TrialErrorReason | null>(null)
 
   const sessionRef = useRef<RecordSession | null>(null)
   const uploadRef = useRef<UploadHandle | null>(null)
@@ -172,7 +182,7 @@ export function useTrialRecord({
     setError(null)
     const mime = pickMime()
     if (!mime) {
-      setError('此瀏覽器不支援錄音格式')
+      setError('unsupportedFormat')
       return
     }
     const session = new RecordSession(mime, () => {
@@ -183,7 +193,7 @@ export function useTrialRecord({
     session.start().catch(() => {
       sessionRef.current = null
       setPhase('idle')
-      setError('無法存取麥克風，請檢查授權')
+      setError('micDenied')
     })
   }, [supported, phase, bubble, dispose])
 
@@ -278,7 +288,7 @@ export function useTrialRecord({
         if (assessRef.current !== controller) return
         assessRef.current = null
         setBubble((b) => (b
-          ? { ...b, assessment: { status: 'failed', error: assessErrorMessage(err) } }
+          ? { ...b, assessment: { status: 'failed', reason: assessErrorReason(err) } }
           : b))
       })
   }, [])

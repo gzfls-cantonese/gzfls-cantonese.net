@@ -2,7 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 interface AsyncState<T> {
   data: T | null
-  error: string | null
+  /**
+   * The raw rejection. Callers resolve it to visitor-facing text at render time
+   * (see `describeDataError`) so a message already on screen re-translates when
+   * the locale changes.
+   */
+  error: unknown
   loading: boolean
 }
 
@@ -22,7 +27,7 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]): AsyncState<T
         if (alive) setState({ data, error: null, loading: false })
       })
       .catch((err: unknown) => {
-        if (alive) setState({ data: null, error: (err as Error).message, loading: false })
+        if (alive) setState({ data: null, error: err, loading: false })
       })
     return () => {
       alive = false

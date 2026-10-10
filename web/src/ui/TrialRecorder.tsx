@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { attachLongPress } from '../data/recorder'
 import type { TrialRecordApi } from '../data/useTrialRecord'
+import { describeTrialError } from '../i18n/errors'
+import { useLocale } from '../i18n/locale'
 
 function MicIcon() {
   return (
@@ -21,6 +23,7 @@ function MicIcon() {
 export default function TrialRecorder({ api }: { api: TrialRecordApi }) {
   const btnRef = useRef<HTMLButtonElement>(null)
   const { supported } = api
+  const { t } = useLocale()
 
   // begin/end change identity as the state machine advances; hold them in refs
   // so the long-press listener is attached once and its internal pressed-state
@@ -51,13 +54,13 @@ export default function TrialRecorder({ api }: { api: TrialRecordApi }) {
         <>
           {api.phase === 'holding' && (
             <div className="trial-prompt" role="status">
-              你就係楷叔，快滴講尼段古仔吧
+              {t('trial.holdingPrompt')}
             </div>
           )}
 
           {api.error && (
             <div className="trial-prompt trial-prompt--error" role="alert">
-              {api.error}
+              {describeTrialError(api.error, t)}
             </div>
           )}
 
@@ -68,7 +71,7 @@ export default function TrialRecorder({ api }: { api: TrialRecordApi }) {
                   type="button"
                   className="trial-bubble__play"
                   onClick={api.toggleBubble}
-                  aria-label={api.bubblePlaying ? '暂停回放' : '回放录音'}
+                  aria-label={api.bubblePlaying ? t('trial.pauseReplay') : t('trial.replay')}
                 >
                   <span className="trial-bubble__icon" aria-hidden="true">
                     {api.bubblePlaying ? (
@@ -83,7 +86,7 @@ export default function TrialRecorder({ api }: { api: TrialRecordApi }) {
                     )}
                   </span>
                   <span className="trial-bubble__dur">{Math.round(api.bubble.durationSec)}″</span>
-                  {api.bubble.uploading && <span className="trial-bubble__up">上傳中…</span>}
+                  {api.bubble.uploading && <span className="trial-bubble__up">{t('trial.uploading')}</span>}
                 </button>
                 {/* Only offered when the server says it can score; hidden otherwise
                     so a visitor never sees a button that must fail. */}
@@ -94,24 +97,24 @@ export default function TrialRecorder({ api }: { api: TrialRecordApi }) {
                     onClick={api.assess}
                     disabled={api.bubble.assessment.status === 'loading'}
                   >
-                    {api.bubble.assessment.status === 'loading' ? '評分中…' : '評分'}
+                    {api.bubble.assessment.status === 'loading' ? t('trial.assessing') : t('trial.assess')}
                   </button>
                 )}
               </div>
 
               {api.bubble.assessment.status === 'scored' && (
                 <div className="trial-bubble__result" role="status">
-                  <span className="trial-bubble__score">{api.bubble.assessment.score}分</span>
+                  <span className="trial-bubble__score">{t('trial.score', { score: api.bubble.assessment.score! })}</span>
                   <span className="trial-bubble__transcript">{api.bubble.assessment.transcript}</span>
                   {api.bubble.assessment.languageWarning && (
-                    <span className="trial-bubble__warn">偵測到非粵語發音，建議用粵語朗讀</span>
+                    <span className="trial-bubble__warn">{t('trial.languageWarning')}</span>
                   )}
                 </div>
               )}
 
-              {api.bubble.assessment.status === 'failed' && (
+              {api.bubble.assessment.status === 'failed' && api.bubble.assessment.reason && (
                 <div className="trial-bubble__result trial-bubble__result--fail" role="alert">
-                  {api.bubble.assessment.error}
+                  {describeTrialError(api.bubble.assessment.reason, t)}
                 </div>
               )}
             </div>
@@ -125,13 +128,13 @@ export default function TrialRecorder({ api }: { api: TrialRecordApi }) {
           ref={btnRef}
           type="button"
           className={`trial-btn${api.phase === 'holding' ? ' trial-btn--active' : ''}`}
-          aria-label="長按錄音"
+          aria-label={t('trial.recordButton')}
         >
           <MicIcon />
         </button>
-        <span className="trial-caption">長按-鬆開，朗读錄製當前小節和AI評分</span>
+        <span className="trial-caption">{t('trial.caption')}</span>
         <Link className="trial-privacy" to="/recording-privacy">
-          隱私和AI評分說明
+          {t('trial.privacyLink')}
         </Link>
       </div>
     </>

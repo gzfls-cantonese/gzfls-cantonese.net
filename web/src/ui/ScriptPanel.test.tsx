@@ -1,6 +1,7 @@
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import ScriptPanel from './ScriptPanel'
+import { LocaleProvider, useLocale } from '../i18n/locale'
 import type { ScriptEntry } from '../data/types'
 
 // @tanstack/react-virtual measures the scroll element and rows via
@@ -71,5 +72,58 @@ describe('ScriptPanel jyutping toggle', () => {
     expect(rows.length).toBeGreaterThan(1)
     fireEvent.click(rows[1])
     expect(onSelect).toHaveBeenCalledWith(1)
+  })
+})
+
+function LocaleProbe() {
+  const { setLocale } = useLocale()
+  return <button onClick={() => setLocale('en')}>to-en</button>
+}
+
+/** [lang, text] for every transcript node, so a locale switch can be proved a no-op. */
+function transcriptSnapshot(root: HTMLElement) {
+  const grab = (selector: string) =>
+    Array.from(root.querySelectorAll(selector)).map((el) => [el.getAttribute('lang'), el.textContent])
+  return { han: grab('.script__han'), jp: grab('.script__jp'), plain: grab('.script__text') }
+}
+
+describe('ScriptPanel locale', () => {
+  beforeEach(() => window.localStorage.clear())
+
+  function renderPanel() {
+    return render(
+      <LocaleProvider>
+        <ScriptPanel entries={entries} currentIndex={0} onSelect={() => {}} />
+        <LocaleProbe />
+      </LocaleProvider>,
+    )
+  }
+
+  it('translates the toolbar but leaves the transcript byte-identical and still zh-Hant', () => {
+    const view = renderPanel()
+    expect(screen.getByText('可滾屏和點擊跳轉')).toBeInTheDocument()
+    expect(screen.getByText('顯示粵拼Jyutping')).toBeInTheDocument()
+
+    const before = transcriptSnapshot(view.container)
+    expect(before.han.length).toBeGreaterThan(0)
+    expect(before.han.every(([lang]) => lang === 'zh-Hant')).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'to-en' }))
+
+    expect(screen.getByText('Scroll, or tap a line to jump to it')).toBeInTheDocument()
+    expect(screen.getByText('Show Jyutping')).toBeInTheDocument()
+    expect(transcriptSnapshot(view.container)).toEqual(before)
+  })
+
+  it('keeps the plain-text fallback annotated as zh-Hant under the en locale', () => {
+    const view = render(
+      <LocaleProvider>
+        <ScriptPanel entries={[entries[2]]} currentIndex={0} onSelect={() => {}} />
+        <LocaleProbe />
+      </LocaleProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'to-en' }))
+    expect(screen.getByText('你好')).toHaveAttribute('lang', 'zh-Hant')
+    expect(transcriptSnapshot(view.container).plain).toEqual([['zh-Hant', '你好']])
   })
 })

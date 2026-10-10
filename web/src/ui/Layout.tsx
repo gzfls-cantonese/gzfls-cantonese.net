@@ -1,20 +1,24 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import Logo from './Logo'
+import LocaleSwitcher from '../i18n/LocaleSwitcher'
+import { useLocale } from '../i18n/locale'
 
 export default function Layout() {
   // The home page renders its own source footer inside the three-part layout.
   const isHome = useLocation().pathname === '/'
+  const { t } = useLocale()
 
   return (
     <div className={`app-shell${isHome ? ' app-shell--home' : ''}`}>
       <header className="app-header">
         <Link to="/" className="brand">
           <Logo className="brand-logo" size={40} />
-          <span className="brand-text">粵語評書</span>
+          <span className="brand-text">{t('brand.text')}</span>
         </Link>
         <nav className="nav">
-          <Link to="/">選集</Link>
-          <Link to="/about">關於</Link>
+          <Link to="/">{t('nav.episodes')}</Link>
+          <Link to="/about">{t('nav.about')}</Link>
+          <LocaleSwitcher />
         </nav>
       </header>
 
@@ -26,10 +30,10 @@ export default function Layout() {
         <footer className="app-footer">
           <div className="home__source">
             <span>
-              語料來源：Hugging Face · <code>CanCLID/zoengjyutgaai</code>
+              {t('source.datasetLabel')}Hugging Face · <code>CanCLID/zoengjyutgaai</code>
             </span>
             <span>
-              數據許可協議：
+              {t('source.licenseLabel')}
               <a
                 href="https://creativecommons.org/publicdomain/zero/1.0/"
                 target="_blank"

@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 import type { PlayerState } from '../player/usePlayer'
+import { useLocale } from '../i18n/locale'
+import type { Translator } from '../i18n/messages'
 
 interface Props {
   player: PlayerState
@@ -10,6 +12,7 @@ interface Props {
 
 export default function PlayerBar({ player, total, recordSlot }: Props) {
   const { currentIndex, status, toggle } = player
+  const { t } = useLocale()
   const pct = total > 0 ? Math.round(((currentIndex + 1) / total) * 100) : 0
   const playing = status === 'playing'
 
@@ -21,7 +24,9 @@ export default function PlayerBar({ player, total, recordSlot }: Props) {
 
       {status === 'error' && player.errorEntryId && (
         <p className="player-bar__error">
-          片段 <code>{player.errorEntryId}</code> 暫時無法播放，已自動跳過
+          {t('player.skipped.before')}
+          <code>{player.errorEntryId}</code>
+          {t('player.skipped.after')}
         </p>
       )}
 
@@ -29,7 +34,7 @@ export default function PlayerBar({ player, total, recordSlot }: Props) {
         <button
           className="icon-btn icon-btn--main"
           onClick={toggle}
-          aria-label={playing ? '暂停' : '播放'}
+          aria-label={playing ? t('player.pause') : t('player.play')}
         >
           {/* Inline SVG: ▶/⏸ code points render as color emoji on Android,
               ignoring the button's text colour. */}
@@ -51,23 +56,23 @@ export default function PlayerBar({ player, total, recordSlot }: Props) {
         <span>
           {currentIndex + 1} / {total}
         </span>
-        <span className="muted">{statusLabel(status)}</span>
+        <span className="muted">{statusLabel(status, t)}</span>
       </div>
     </div>
   )
 }
 
-function statusLabel(status: PlayerState['status']): string {
+function statusLabel(status: PlayerState['status'], t: Translator): string {
   switch (status) {
     case 'playing':
-      return '播放中'
+      return t('player.status.playing')
     case 'paused':
-      return '已暂停'
+      return t('player.status.paused')
     case 'ended':
-      return '本集已結束'
+      return t('player.status.ended')
     case 'error':
-      return '片段錯誤'
+      return t('player.status.error')
     default:
-      return '待播放'
+      return t('player.status.idle')
   }
 }
