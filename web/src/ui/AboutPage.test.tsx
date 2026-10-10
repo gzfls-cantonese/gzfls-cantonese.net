@@ -59,6 +59,7 @@ describe('AboutPage', () => {
     expect(screen.getByText(/本站粵語評書音頻與繁體腳本/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '數據集主頁' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'CC0 1.0 Universal 許可證全文' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '首頁背景圖片來源' })).toBeInTheDocument()
   })
 
   it('re-renders every static paragraph in English on a locale switch', async () => {
@@ -74,6 +75,7 @@ describe('AboutPage', () => {
     expect(screen.getByText(/come from the Hugging Face community dataset/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Dataset homepage' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Read the full CC0 1\.0 Universal license/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Homepage background image source' })).toBeInTheDocument()
     expect(screen.queryByText(/品三國，識粵語/)).not.toBeInTheDocument()
   })
 
@@ -89,6 +91,26 @@ describe('AboutPage', () => {
     // Only the link wording is localized; the targets and the dataset name are data.
     expect(linksSnapshot().map((l) => l.href)).toEqual(before.map((l) => l.href))
     expect(screen.getByText(/張悅楷講古語音-三國演義子數據集/)).toBeInTheDocument()
+  })
+
+  it('gives each locale its own form of the woodblock citation', async () => {
+    const zhForm = /^《三國志像·繡像金批第一才子書》/
+    const enForm = /^Sanguo zhi xiang/
+    const credits = () => {
+      const cards = document.querySelectorAll('.about section')
+      return cards[cards.length - 1].querySelector('p')?.textContent ?? ''
+    }
+
+    renderAbout()
+    await screen.findByRole('heading', { name: '關於本站' })
+    expect(credits()).toMatch(zhForm)
+    expect(credits()).toContain('毛聲山評點')
+
+    switchToEnglish()
+    expect(credits()).toMatch(enForm)
+    expect(credits()).toContain('Public domain.')
+    // Same entry, one form per locale — the printed title never appears bare in English.
+    expect(credits()).not.toMatch(zhForm)
   })
 
   it('still shows the contact address and falls back to the built-in licence when the manifest fails', async () => {

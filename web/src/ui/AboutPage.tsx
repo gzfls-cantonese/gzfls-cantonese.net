@@ -43,6 +43,10 @@ export default function AboutPage() {
           </a>
         </p>
       </section>
+      <section>
+        <h2>{t('about.artwork.title')}</h2>
+        <p>{t('about.artwork.credits')}</p>
+      </section>
     </div>
   )
 }

@@ -74,6 +74,13 @@ export interface Messages {
   'about.dataset.after': string
   'about.link.dataset': string
   'about.link.license': (args: { license: string }) => string
+  'about.artwork.title': string
+  /**
+   * Bibliographic citation for the home-page woodblock. Each locale carries its
+   * own form of the same entry: the Chinese keeps the title as printed, the
+   * English romanizes it and glosses it.
+   */
+  'about.artwork.credits': string
   'privacy.title': string
   'privacy.intro': string
   'privacy.collect.title': string
@@ -171,6 +178,9 @@ const zhHant: Messages = {
   'about.dataset.after': ' “張悅楷講古語音-三國演義子數據集”，共 157 集、3.92 萬段，數據集許可證： ',
   'about.link.dataset': '數據集主頁',
   'about.link.license': ({ license }) => `${license} 許可證全文`,
+  'about.artwork.title': '首頁背景圖片來源',
+  'about.artwork.credits':
+    '《三國志像·繡像金批第一才子書》，毛聲山評點，金聖歎序，大魁堂藏版，清初刊本。公有領域。',
   'privacy.title': '錄音和AI評分隱私處理聲明',
   'privacy.intro':
     '本聲明說明「當前小節試講和AI評分」功能如何處理你的錄音。核心原則：**只用於給你本人這一段試講做粵語發音評分，不作他用；不註冊、不收集身份資料；退出即銷毀。**',
@@ -277,6 +287,9 @@ const en: Messages = {
     ' — its “張悅楷講古語音-三國演義子數據集” subset — 157 episodes and 39,173 segments. Dataset license: ',
   'about.link.dataset': 'Dataset homepage',
   'about.link.license': ({ license }) => `Read the full ${license} license`,
+  'about.artwork.title': 'Homepage background image source',
+  'about.artwork.credits':
+    'Sanguo zhi xiang: Xiuxiang jinpi diyi caizi shu (Illustrated Romance of the Three Kingdoms), early Qing woodblock edition published by Dakuilang. Public domain.',
   'privacy.title': 'Recording and AI Scoring Privacy Statement',
   'privacy.intro':
     'This statement explains how the “record this line and score it with AI” feature handles your recording. The core principle: **it is used only to score the Cantonese pronunciation of your own take on this one line, and for nothing else; there is no sign-up and no identity data collected; it is destroyed when you leave.**',
