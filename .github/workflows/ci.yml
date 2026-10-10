@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# Least privilege for the GITHUB_TOKEN: nothing here writes back to the repo.
+permissions:
+  contents: read
+
 jobs:
   web:
     runs-on: ubuntu-latest
@@ -22,10 +26,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Blocks the pipeline when any high/critical advisory is present.
-      - name: Dependency security audit
-        run: npm audit --audit-level=high
-
       - name: Typecheck
         run: npm run typecheck
 
@@ -34,6 +34,12 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # Last on purpose: an advisory blocks the pipeline, and running it first
+      # used to skip typecheck/test/build entirely, so a red run said nothing
+      # about whether the code still worked.
+      - name: Dependency security audit
+        run: npm audit --audit-level=high
 
   server:
     runs-on: ubuntu-latest
