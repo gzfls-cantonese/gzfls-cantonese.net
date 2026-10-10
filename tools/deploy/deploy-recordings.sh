@@ -187,11 +187,14 @@ command -v zip >/dev/null 2>&1 || { echo "zip not found; install zip to package 
 mkdir -p "${OUT_DIR}"
 rm -f "${ZIP}"
 echo "==> packaging -> ${ZIP}"
+# .env* is excluded because a local-run env file dropped next to the function
+# would otherwise be uploaded into the deployed bundle.
 ( cd "${SRC}" && zip -r -q "${ZIP}" . \
-    -x 'node_modules/*' -x '*.test.mjs' -x '.deploy/*' -x 'dist/*' )
+    -x 'node_modules/*' -x '*.test.mjs' -x '.deploy/*' -x 'dist/*' \
+    -x '.env*' -x '.DS_Store' )
 
 echo "==> writing env manifest -> ${ENVF}"
-manifest > "${ENVF}"
+( umask 077 && manifest > "${ENVF}" )
 
 if command -v sha256sum >/dev/null 2>&1; then
   SUM="$(sha256sum "${ZIP}" | cut -d' ' -f1)"
