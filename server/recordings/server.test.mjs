@@ -72,3 +72,12 @@ test('a normal-sized body is routed through to handle()', async (t) => {
   assert.match(body.uploadUrl, /^\/local-put\/recordings\//)
   assert.equal(body.assessAvailable, false, 'no credentials in this env')
 })
+
+test('only allow-listed origins are echoed back over a real socket', async (t) => {
+  const base = await startServer(t, { RECORDINGS_ALLOWED_ORIGINS: 'https://allowed.example' })
+  const allowed = await fetch(`${base}/nope`, { headers: { origin: 'https://allowed.example' } })
+  assert.equal(allowed.headers.get('access-control-allow-origin'), 'https://allowed.example')
+
+  const denied = await fetch(`${base}/nope`, { headers: { origin: 'https://evil.example' } })
+  assert.equal(denied.headers.get('access-control-allow-origin'), null)
+})

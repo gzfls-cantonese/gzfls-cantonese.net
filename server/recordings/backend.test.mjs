@@ -131,3 +131,18 @@ test('loadConfig derives the dataset base from the OSS config', () => {
   const local = loadConfig({ RECORDINGS_LOCAL_DIR: '/tmp/x' })
   assert.equal(local.assess.datasetBase, '', 'no bucket/endpoint to derive from')
 })
+
+test('loadConfig defaults the CORS allow-list and honours an override', () => {
+  const cfg = loadConfig({
+    OSS_BUCKET: 'b', OSS_ENDPOINT: 'e', OSS_ACCESS_KEY_ID: 'i', OSS_ACCESS_KEY_SECRET: 's',
+  })
+  assert.ok(cfg.allowedOrigins.includes('https://gzfls-cantonese.net'), 'the deployed site origin')
+  assert.ok(cfg.allowedOrigins.includes('http://localhost:5173'), 'the dev server origin')
+  assert.ok(!cfg.allowedOrigins.includes('*'), 'never a wildcard')
+
+  const overridden = loadConfig({
+    OSS_BUCKET: 'b', OSS_ENDPOINT: 'e', OSS_ACCESS_KEY_ID: 'i', OSS_ACCESS_KEY_SECRET: 's',
+    RECORDINGS_ALLOWED_ORIGINS: 'https://a.example, https://b.example/ ,',
+  })
+  assert.deepEqual(overridden.allowedOrigins, ['https://a.example', 'https://b.example'])
+})

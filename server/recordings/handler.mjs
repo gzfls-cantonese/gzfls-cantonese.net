@@ -11,7 +11,7 @@
  *
  * Security: the anon id arrives only in the X-Anon-Id header; object keys are
  * always built under that anon prefix, so a client can never address another
- * anon's objects.
+ * anon's objects. Cross-origin reads are limited to cfg.allowedOrigins.
  */
 import { randomBytes } from 'node:crypto'
 import { assertUnderPrefix } from './backend.mjs'
@@ -34,14 +34,28 @@ function json(status, body, extraHeaders = {}) {
   }
 }
 
-function corsHeaders(req) {
-  const origin = req.headers['origin'] || '*'
-  return {
-    'access-control-allow-origin': origin,
+/**
+ * CORS headers for this request. Only an allow-listed origin is echoed back:
+ * reflecting whatever arrived, combined with the Access-Control-Allow-Credentials
+ * the FC trigger layer adds on its own, would let any site read responses
+ * cross-origin. For a disallowed origin the header is omitted entirely, so the
+ * browser blocks the response. Vary is required because the answer now depends on
+ * a request header that a shared cache would otherwise key away.
+ */
+function corsHeaders(cfg, req) {
+  const common = {
     'access-control-allow-headers': 'X-Anon-Id, Content-Type',
     'access-control-allow-methods': 'POST, PUT, OPTIONS',
     'access-control-max-age': '600',
   }
+  const origin = req.headers['origin']
+  if (typeof origin !== 'string' || !origin) return common
+  const allowed = cfg.allowedOrigins || []
+  if (!allowed.includes(origin)) {
+    console.warn(`recordings fn: rejected cross-origin request from ${origin}`)
+    return { ...common, vary: 'Origin' }
+  }
+  return { ...common, 'access-control-allow-origin': origin, vary: 'Origin' }
 }
 
 function buildKey(cfg, anon, episode, entryId, recId, ext) {
@@ -64,7 +78,7 @@ function clientIp(req) {
 export async function handle(cfg, backend, req, deps = {}) {
   const url = new URL(req.url, 'http://local')
   const path = url.pathname
-  const cors = corsHeaders(req)
+  const cors = corsHeaders(cfg, req)
 
   if (req.method === 'OPTIONS') {
     return { status: 204, headers: cors, body: '' }

@@ -20,6 +20,7 @@
 | `RECORDINGS_PREFIX` | 否 | `recordings` | 对象 key 前缀，也是 lifecycle 规则与 RAM 授权的作用域。 |
 | `RECORDINGS_MAX_DURATION` | 否 | `60` | 单段录音时长上限（秒）。超限的 presign 请求返回 413。MUST 为 > 0，否则启动即报错。 |
 | `RECORDINGS_PRESIGN_TTL` | 否 | `300` | 签名 URL 有效期（秒），**上传（PUT）与评分取回（GET）共用**。 |
+| `RECORDINGS_ALLOWED_ORIGINS` | 否 | 内置站点 origin 列表 | 逗号分隔的 CORS 白名单。只有名单内的 `Origin` 会被回显 `Access-Control-Allow-Origin`，**不在名单内则该头整个不发**（浏览器随后拦截响应）。换域名部署时必须设置，否则录音功能在浏览器里静默失败。内置默认同时含 `https://gzfls-cantonese.net`、`http://gzfls-cantonese.net`（站点当前 http/https 都可达且无跳转）与 `http://localhost:5173`。 |
 | `PORT` | 否 | `8788` | HTTP 监听端口。 |
 | `DASHSCOPE_API_KEY` | 评分必填 | 无 | 阿里云百炼（Model Studio）**地域级** API Key。未设置 ⇒ 评分整体关闭（`assessAvailable=false`，前端隐藏入口），这也是评分功能的回滚开关。 |
 | `ASSESS_ASR` | 否 | 无（= 调用真实服务） | 设为 `fake` 使用确定性离线桩转写，供 local 后端 / e2e 跑通整条链路。**注意：按 `assessAvailable` 判据，fake 模式仍需一个（占位）`DASHSCOPE_API_KEY` 才会亮起前端按钮。** |
@@ -58,6 +59,14 @@ node server.mjs
 
 `ASSESS_DATASET_BASE` 指向 vite dev server 的 `/data` 中间件（映射仓库根的 `dist-assets/`），函数据此拉 `episodes/ep_<NNN>.json` 取参考文本；未生成 `dist-assets/` 时先按 `tools/deploy/DEPLOY.md` 跑一次 pipeline。
 
+**手机真机走 LAN 验证时**（页面 origin 是 `http://<mac-ip>:5173`，不在内置白名单里），启动函数时把该 origin 加上，否则浏览器会因缺 `Access-Control-Allow-Origin` 而拦下所有调用（`curl` 不带 `Origin`，不受影响）：
+
+```bash
+RECORDINGS_LOCAL_DIR=/tmp/recfn PORT=8799 \
+RECORDINGS_ALLOWED_ORIGINS="http://localhost:5173,http://127.0.0.1:5173,http://192.168.1.20:5173" \
+node server.mjs
+```
+
 冒烟：
 
 ```bash
@@ -88,13 +97,13 @@ cd server/recordings
 node --test          # 或 npm test
 ```
 
-覆盖：OPTIONS/CORS、缺匿名头 403、超时长 413、presign 成功与 `assessAvailable` 各组合、local-put + dispose、跨 anon `deleted:0` 且对象保留、key 遍历（`..`）被拒、未知路由 404、错误方法 405；`/assess` 的参数校验 400、无凭据 503、跨 anon 与销毁后 404、不存在 list/download 路由；GET 签名的 stringToSign 与 verb 绑定；真实 ASR 客户端的请求体/鉴权头/base 拼接、数组内容拼接、缺凭据/无 URL/非 2xx/超时/网络失败/非 JSON 的错误映射；参考文本缓存/TTL/各类失败、返回 `jyutping`；字级相似度与 Python `difflib.SequenceMatcher` 已知结果对照；同音容错（同音不同字=100、忽略声调、不同音节不匹配、字典缺字回退、空粤拼回退）；字典加载与缺失/损坏降级；assess 同音与字级回退两路；限流（每小时/每日双窗口独立、达上限拒绝、滚动重置、被拒不延长锁定、`Retry-After` 取较小窗口、per-anon 与 per-IP 互不串扰、无身份不限流、handler 429 不计费不触数据集、单实例全局维度（轮换匿名 ID 与 IP 仍被拦、按小时滚动重置、不继承每日上限、无身份时也生效）、计数表硬上限与「淘汰不重置全局计数」）；语种检测（真实客户端从 annotations 取检测语种、fake 模式语种为空、非粤语 `zh` 置 `languageWarning` 且仍打分、粤语 `yue` 不告警、`isCantonese` 接受 `yue` 变体拒绝 `zh`/其他、`asrLang` 为 `auto`/空时请求体省略 `language` 提示、为 `yue` 时发送该提示）；`nosniff`；mime 原型键（`constructor`/`toString`/`__proto__`/`hasOwnProperty`）一律 400；oss 后端 `delete` 同样先做前缀断言（在触网之前）；`server.mjs` 入口的集成测试（真实起进程打 HTTP：2 MB 请求体 ⇒ `413` 且实例仍能服务下一个请求、正常请求体照常路由）。合计 89 项。
+覆盖：OPTIONS/CORS、缺匿名头 403、超时长 413、presign 成功与 `assessAvailable` 各组合、local-put + dispose、跨 anon `deleted:0` 且对象保留、key 遍历（`..`）被拒、未知路由 404、错误方法 405；`/assess` 的参数校验 400、无凭据 503、跨 anon 与销毁后 404、不存在 list/download 路由；GET 签名的 stringToSign 与 verb 绑定；真实 ASR 客户端的请求体/鉴权头/base 拼接、数组内容拼接、缺凭据/无 URL/非 2xx/超时/网络失败/非 JSON 的错误映射；参考文本缓存/TTL/各类失败、返回 `jyutping`；字级相似度与 Python `difflib.SequenceMatcher` 已知结果对照；同音容错（同音不同字=100、忽略声调、不同音节不匹配、字典缺字回退、空粤拼回退）；字典加载与缺失/损坏降级；assess 同音与字级回退两路；限流（每小时/每日双窗口独立、达上限拒绝、滚动重置、被拒不延长锁定、`Retry-After` 取较小窗口、per-anon 与 per-IP 互不串扰、无身份不限流、handler 429 不计费不触数据集、单实例全局维度（轮换匿名 ID 与 IP 仍被拦、按小时滚动重置、不继承每日上限、无身份时也生效）、计数表硬上限与「淘汰不重置全局计数」）；语种检测（真实客户端从 annotations 取检测语种、fake 模式语种为空、非粤语 `zh` 置 `languageWarning` 且仍打分、粤语 `yue` 不告警、`isCantonese` 接受 `yue` 变体拒绝 `zh`/其他、`asrLang` 为 `auto`/空时请求体省略 `language` 提示、为 `yue` 时发送该提示）；CORS 白名单（名单内回显 + `Vary: Origin`、名单外与 `null`/仿冒子域一律不发 `allow-origin` 但请求本身仍对非浏览器调用方成功、env 覆盖与默认值解析、真实 socket 上验证）；`nosniff`；mime 原型键（`constructor`/`toString`/`__proto__`/`hasOwnProperty`）一律 400；oss 后端 `delete` 同样先做前缀断言（在触网之前）；`server.mjs` 入口的集成测试（真实起进程打 HTTP：2 MB 请求体 ⇒ `413` 且实例仍能服务下一个请求、正常请求体照常路由、白名单在真实 socket 上生效）。合计 92 项。
 
 ## HTTP 接口
 
 | 方法 & 路径 | 请求头 | 请求体 | 响应 |
 | --- | --- | --- | --- |
-| `OPTIONS *` | — | — | `204` + CORS 头 |
+| `OPTIONS *` | — | — | `204` + CORS 头（`allow-origin` 仅对白名单内 origin 发出） |
 | `POST /presign-upload` | `X-Anon-Id`（UUID v4） | `{episode, entryId, durationSec, mime}` | `200 {recId, uploadUrl, key, assessAvailable}` / `403` 匿名头缺失或非法 / `400` 参数或 mime 非法 / `413` 超时长 |
 | `POST /assess` | `X-Anon-Id`（UUID v4） | `{episode, entryId, recId, ext}` | `200 {score, transcript, languageWarning}` / `400` 参数非法 / `403` 匿名头缺失或非法 / `404` 本人前缀下命中不到对象（他人录音或已销毁）/ `429` 超过限流上限（附 `Retry-After`，不计费 ASR）/ `503` 评分不可用、数据集或 ASR 失败 |
 | `POST /dispose` | `X-Anon-Id`（UUID v4） | `{items:[{episode, entryId, recId, ext}]}` | `200 {deleted}` |
@@ -123,12 +132,15 @@ node --test          # 或 npm test
 
 ## CORS
 
-所有响应带 CORS 头（`corsHeaders`）：
+`corsHeaders` 按白名单发头，**不回显任意 `Origin`**：
 
-- `access-control-allow-origin`：回显请求 `Origin`，无则 `*`
+- `access-control-allow-origin`：仅当请求 `Origin` 命中 `cfg.allowedOrigins`（来自 `RECORDINGS_ALLOWED_ORIGINS`，见环境变量表）时才回显该 origin；否则**整个头不发**，浏览器随后拦截响应。非浏览器调用方（curl、服务端）不带 `Origin`，不受影响。
+- `vary: Origin`：只要有 `Origin` 就带上，避免共享缓存把某个 origin 的应答发给另一个 origin。
 - `access-control-allow-headers`：`X-Anon-Id, Content-Type`
 - `access-control-allow-methods`：`POST, PUT, OPTIONS`
 - `access-control-max-age`：`600`
+
+之所以必须白名单：FC 触发器那一层会**自行附加** `Access-Control-Allow-Credentials: true`（不是本仓库代码设的）。"反射具体 origin + 允许携带凭据" 是 CORS 里最危险的组合，任意站点都能跨域读到响应；改成白名单后，非名单 origin 拿不到 `allow-origin`，那一层附加的凭据头也就无从生效。**FC 触发器自身的 CORS 配置仍应在控制台收窄到站点域名并关掉 allow-credentials**，两侧都改才算收口。
 
 前端跨域调用 presign-upload / assess / dispose 与直传 OSS 时依赖上述头。若在 OSS 侧直传，另需在 bucket 上配置对应的 CORS 规则（允许 `PUT`、来源为站点域名、`Allowed Header` 含 `*`）。评分取回音频走**服务端签名的 GET URL**（由 ASR 服务直接访问，不经浏览器），因此不需要为 GET 放宽 bucket CORS。
 

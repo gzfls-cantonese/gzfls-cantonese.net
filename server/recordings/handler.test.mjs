@@ -14,6 +14,7 @@ import { createRateLimiter } from './ratelimit.mjs'
 
 const ANON_A = '11111111-1111-4111-8111-111111111111'
 const ANON_B = '22222222-2222-4222-8222-222222222222'
+const ALLOWED_ORIGIN = 'https://gzfls-cantonese.net'
 
 async function setup() {
   const dir = await mkdtemp(path.join(tmpdir(), 'recfn-'))
@@ -28,6 +29,7 @@ async function setup() {
     maxDurationSec: 60,
     presignTtlSec: 300,
     port: 0,
+    allowedOrigins: [ALLOWED_ORIGIN],
   }
   return { cfg, backend: createBackend(cfg), dir }
 }
@@ -36,11 +38,28 @@ function req(method, url, headers = {}, body = '') {
   return { method, url, headers, body }
 }
 
-test('OPTIONS returns 204 with CORS', async () => {
+test('OPTIONS returns 204 with CORS for an allow-listed origin', async () => {
   const { cfg, backend } = await setup()
-  const out = await handle(cfg, backend, req('OPTIONS', '/presign-upload', { origin: 'http://x' }))
+  const out = await handle(cfg, backend, req('OPTIONS', '/presign-upload', { origin: ALLOWED_ORIGIN }))
   assert.equal(out.status, 204)
-  assert.equal(out.headers['access-control-allow-origin'], 'http://x')
+  assert.equal(out.headers['access-control-allow-origin'], ALLOWED_ORIGIN)
+  assert.equal(out.headers.vary, 'Origin', 'a cache must not serve this answer to another origin')
+})
+
+test('a disallowed origin gets no allow-origin header at all', async () => {
+  const { cfg, backend } = await setup()
+  for (const origin of ['https://evil.example', 'null', 'http://gzfls-cantonese.net.evil.example']) {
+    const preflight = await handle(cfg, backend, req('OPTIONS', '/assess', { origin }))
+    assert.equal(preflight.status, 204)
+    assert.equal(preflight.headers['access-control-allow-origin'], undefined, origin)
+
+    const post = await handle(cfg, backend, req('POST', '/presign-upload', {
+      origin,
+      'x-anon-id': ANON_A,
+    }, JSON.stringify({ episode: 1, entryId: 'e1', durationSec: 5 })))
+    assert.equal(post.status, 200, 'the request still succeeds for non-browser callers')
+    assert.equal(post.headers['access-control-allow-origin'], undefined, origin)
+  }
 })
 
 test('json responses refuse content sniffing', async () => {

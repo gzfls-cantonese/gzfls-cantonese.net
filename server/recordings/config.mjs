@@ -10,7 +10,27 @@
  * Scoring (optional, off unless DASHSCOPE_API_KEY is set): DASHSCOPE_API_KEY,
  * ASSESS_ASR_BASE, ASSESS_ASR_MODEL, ASSESS_ASR_LANG, ASSESS_DATASET_BASE,
  * ASSESS_ASR=fake.
+ *
+ * CORS: RECORDINGS_ALLOWED_ORIGINS (comma-separated) overrides the built-in list
+ * of site origins; see DEFAULT_ALLOWED_ORIGINS below.
  */
+// Origins allowed to read responses cross-origin. The site is currently served
+// over both http and https with no redirect, so both are listed or the recording
+// UI breaks on whichever one a visitor landed on; drop the http entry once the
+// CDN forces HTTPS. Override with a comma-separated RECORDINGS_ALLOWED_ORIGINS
+// when deploying under another domain.
+const DEFAULT_ALLOWED_ORIGINS = [
+  'https://gzfls-cantonese.net',
+  'http://gzfls-cantonese.net',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+]
+
+function parseOrigins(raw) {
+  const list = String(raw || '').split(',').map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean)
+  return list.length ? list : DEFAULT_ALLOWED_ORIGINS
+}
+
 export function loadConfig(env = process.env) {
   const localDir = env.RECORDINGS_LOCAL_DIR || ''
   const bucket = env.OSS_BUCKET || ''
@@ -26,6 +46,7 @@ export function loadConfig(env = process.env) {
     maxDurationSec: Number(env.RECORDINGS_MAX_DURATION || 60),
     presignTtlSec: Number(env.RECORDINGS_PRESIGN_TTL || 300),
     port: Number(env.PORT || 8788),
+    allowedOrigins: parseOrigins(env.RECORDINGS_ALLOWED_ORIGINS),
     assess: {
       // 'fake' = deterministic offline stub; '' = call the real ASR service.
       mode: env.ASSESS_ASR || '',
