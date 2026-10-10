@@ -248,11 +248,21 @@ describe('useTrialRecord scoring', () => {
 
   it('classifies server failures, a disposed recording and a timeout into reason codes', async () => {
     const cases: Array<[unknown, string]> = [
-      [new RecordingsError('recordings /assess failed (503): scoring unavailable', 503, 'scoring unavailable'), 'scoringUnavailable'],
-      [new RecordingsError('recordings /assess failed (429): rate limited', 429, 'rate limited'), 'rateLimited'],
-      [new RecordingsError('recordings /assess failed (404)', 404, ''), 'destroyed'],
+      [new RecordingsError('/assess (503): scoring unavailable', 503, 'scoring unavailable'), 'scoringUnavailable'],
+      // Same cause, reached from the other direction: a key present but no ASR host.
+      [new RecordingsError('/assess (503): ASR not configured', 503, 'ASR not configured'), 'scoringUnavailable'],
+      [new RecordingsError('/assess (429): rate limited', 429, 'rate limited'), 'rateLimited'],
+      [new RecordingsError('/assess (404): recording not found', 404, 'recording not found'), 'destroyed'],
+      // A 404 from the reference loader is a server data problem, not a destroyed clip.
+      [new RecordingsError('/assess (404)', 404, 'episode 12 index not found (404)'), 'serviceUnavailable'],
+      [new RecordingsError('/assess (503): ASR returned no transcript', 503, 'ASR returned no transcript'), 'noAudio'],
+      [new RecordingsError('/assess (503): ASR timed out', 503, 'ASR timed out'), 'timeout'],
+      [new RecordingsError('/assess (503): ASR unreachable', 503, 'ASR unreachable'), 'serviceUnavailable'],
+      [new RecordingsError('/assess (503): storage unavailable', 503, 'storage unavailable'), 'serviceUnavailable'],
+      [new RecordingsError('/assess (502): ASR error 401', 502, 'ASR error 401'), 'serviceUnavailable'],
       [Object.assign(new Error('Timed out'), { name: 'TimeoutError' }), 'timeout'],
       [new TypeError('network'), 'unknown'],
+      [new RecordingsError('/assess (400): invalid episode', 400, 'invalid episode'), 'unknown'],
     ]
     for (const [err, reason] of cases) {
       vi.mocked(assessRecording).mockRejectedValueOnce(err as never)

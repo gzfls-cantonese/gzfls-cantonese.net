@@ -130,7 +130,8 @@ value, or in the other locale.
 
 - **WHEN** AI scoring of a trial recording fails while the interface is in
   English — whether because scoring is unavailable, rate limited, the recording
-  is already destroyed, or the request times out
+  is already destroyed, the request times out, the capture carried no audio, or
+  the scoring chain failed for a reason the visitor cannot act on
 - **THEN** the message shown to the visitor is the English equivalent for that
   specific cause
 

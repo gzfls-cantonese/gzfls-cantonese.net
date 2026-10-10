@@ -222,6 +222,8 @@ describe('TrialRecorder locale', () => {
       ['rateLimited', 'Too many scoring requests — try again later'],
       ['destroyed', 'That recording was already destroyed'],
       ['timeout', 'Scoring timed out — try again later'],
+      ['noAudio', "No audio was picked up — check this browser's microphone access in your system settings"],
+      ['serviceUnavailable', 'Scoring is unavailable right now — try again later'],
       ['unknown', 'Scoring failed — try again later'],
     ]
     for (const [reason, expected] of cases) {

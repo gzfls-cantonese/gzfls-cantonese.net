@@ -34,6 +34,10 @@ export function describeTrialError(reason: TrialErrorReason, t: Translator): str
       return t('trial.error.destroyed')
     case 'timeout':
       return t('trial.error.timeout')
+    case 'noAudio':
+      return t('trial.error.noAudio')
+    case 'serviceUnavailable':
+      return t('trial.error.serviceUnavailable')
     case 'unknown':
       return t('trial.error.unknown')
     case 'unsupportedFormat':

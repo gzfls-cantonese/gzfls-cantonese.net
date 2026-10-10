@@ -36,7 +36,14 @@ export type AssessStatus = 'idle' | 'loading' | 'scored' | 'failed'
  * Failure causes travel as codes and are resolved to visitor-facing text at
  * render time, so a message already on screen re-translates on a locale switch.
  */
-export type AssessErrorReason = 'scoringUnavailable' | 'rateLimited' | 'destroyed' | 'timeout' | 'unknown'
+export type AssessErrorReason =
+  | 'scoringUnavailable'
+  | 'rateLimited'
+  | 'destroyed'
+  | 'timeout'
+  | 'noAudio'
+  | 'serviceUnavailable'
+  | 'unknown'
 
 export type RecorderErrorReason = 'unsupportedFormat' | 'micDenied'
 
@@ -97,11 +104,21 @@ const ASSESS_TIMEOUT_MS = 30_000
 
 const IDLE_ASSESSMENT: TrialAssessment = { status: 'idle' }
 
+/**
+ * The server's `{error}` string is the only thing that tells "scoring is off"
+ * from "your clip carried no audio" from "the ASR provider refused us", so map it
+ * here instead of letting every 5xx collapse into a generic retry prompt.
+ */
 function assessErrorReason(err: unknown): AssessErrorReason {
   if (err instanceof RecordingsError) {
-    if (err.status === 503 && err.reason === 'scoring unavailable') return 'scoringUnavailable'
-    if (err.status === 429) return 'rateLimited'
-    if (err.status === 404) return 'destroyed'
+    const { status, reason } = err
+    if (status === 429) return 'rateLimited'
+    if (status === 404) return reason === 'recording not found' ? 'destroyed' : 'serviceUnavailable'
+    if (reason === 'scoring unavailable' || reason === 'ASR not configured') return 'scoringUnavailable'
+    if (reason === 'ASR timed out') return 'timeout'
+    if (reason === 'ASR returned no transcript') return 'noAudio'
+    if (status === 502 || status === 503) return 'serviceUnavailable'
+    return 'unknown'
   }
   if ((err as Error)?.name === 'TimeoutError') return 'timeout'
   return 'unknown'

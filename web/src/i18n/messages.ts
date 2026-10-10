@@ -104,6 +104,10 @@ export interface Messages {
   'trial.error.rateLimited': string
   'trial.error.destroyed': string
   'trial.error.timeout': string
+  /** Dead microphone: captured, but no signal ever reached the encoder. */
+  'trial.error.noAudio': string
+  /** The scoring chain failed for a reason the visitor cannot act on. */
+  'trial.error.serviceUnavailable': string
   'trial.error.unknown': string
   'trial.error.unsupportedFormat': string
   'trial.error.micDenied': string
@@ -210,6 +214,8 @@ const zhHant: Messages = {
   'trial.error.rateLimited': '評分太頻繁，請稍後再試',
   'trial.error.destroyed': '錄音已銷毀，無法評分',
   'trial.error.timeout': '評分逾時，請稍後再試',
+  'trial.error.noAudio': '未錄到聲音，請檢查系統給瀏覽器的麥克風權限',
+  'trial.error.serviceUnavailable': '評分服務暫時不可用，請稍後再試',
   'trial.error.unknown': '評分失敗，請稍後再試',
   'trial.error.unsupportedFormat': '此瀏覽器不支援錄音格式',
   'trial.error.micDenied': '無法存取麥克風，請檢查授權',
@@ -321,6 +327,9 @@ const en: Messages = {
   'trial.error.rateLimited': 'Too many scoring requests — try again later',
   'trial.error.destroyed': 'That recording was already destroyed',
   'trial.error.timeout': 'Scoring timed out — try again later',
+  'trial.error.noAudio':
+    "No audio was picked up — check this browser's microphone access in your system settings",
+  'trial.error.serviceUnavailable': 'Scoring is unavailable right now — try again later',
   'trial.error.unknown': 'Scoring failed — try again later',
   'trial.error.unsupportedFormat': 'This browser supports no recording format',
   'trial.error.micDenied': 'Cannot access the microphone — check the permission',
