@@ -23,3 +23,17 @@ export const RECORDINGS_API: string | null = recRaw ? recRaw.replace(/\/+$/, '')
 export function indexUrl(relativePath: string): string {
   return `${assetUrl(relativePath)}?v=${DEPLOY_VERSION}`
 }
+
+/**
+ * Manifest URLs go straight into `<a href>`, so a `javascript:` value would run
+ * in the reader's session. Every real external link here is https; anything else
+ * degrades to a dead anchor instead of executing.
+ */
+export function safeExternalUrl(href: string | null | undefined): string {
+  if (!href) return '#'
+  try {
+    return new URL(href).protocol === 'https:' ? href : '#'
+  } catch {
+    return '#'
+  }
+}

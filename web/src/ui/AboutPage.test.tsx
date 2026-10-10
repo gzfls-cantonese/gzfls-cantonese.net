@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import AboutPage from './AboutPage'
 import { LocaleProvider, useLocale } from '../i18n/locale'
@@ -121,6 +121,20 @@ describe('AboutPage', () => {
     const mail = await screen.findByRole('link', { name: 'gzfls-cantonese@outlook.com' })
     expect(mail).toHaveAttribute('href', 'mailto:gzfls-cantonese@outlook.com')
     expect(screen.getByText('CC0 1.0 Universal')).toBeInTheDocument()
+  })
+
+  it('renders a dead anchor instead of a manifest link that could execute script', async () => {
+    loadManifest.mockResolvedValue({
+      ...manifest,
+      source: 'javascript:alert(document.cookie)',
+      licenseUrl: 'data:text/html,<script>alert(1)</script>',
+    })
+    renderAbout()
+
+    const dataset = await screen.findByRole('link', { name: '數據集主頁' })
+    const license = screen.getByRole('link', { name: /CC0 1\.0 Universal 許可證全文/ })
+    await waitFor(() => expect(dataset).toHaveAttribute('href', '#'))
+    expect(license).toHaveAttribute('href', '#')
   })
 })
 

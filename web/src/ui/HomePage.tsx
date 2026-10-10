@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { safeExternalUrl } from '../config'
 import { loadManifest } from '../data/api'
 import { useAsync } from '../data/useAsync'
 import { describeDataError } from '../i18n/errors'
@@ -58,7 +59,7 @@ export default function HomePage() {
         </span>
         <span>
           {t('source.licenseLabel')}
-          <a href={data.licenseUrl} target="_blank" rel="noreferrer noopener">
+          <a href={safeExternalUrl(data.licenseUrl)} target="_blank" rel="noreferrer noopener">
             {data.license}
           </a>
         </span>

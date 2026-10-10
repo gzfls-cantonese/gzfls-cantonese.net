@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { loadManifest } from '../data/api'
+import { safeExternalUrl } from '../config'
 import { useLocale } from '../i18n/locale'
 import type { Manifest } from '../data/types'
 
@@ -12,8 +13,12 @@ export default function AboutPage() {
   }, [])
 
   const license = manifest?.license ?? 'CC0 1.0 Universal'
-  const licenseUrl = manifest?.licenseUrl ?? 'https://creativecommons.org/publicdomain/zero/1.0/'
-  const source = manifest?.source ?? 'https://huggingface.co/datasets/CanCLID/zoengjyutgaai'
+  const licenseUrl = safeExternalUrl(
+    manifest?.licenseUrl ?? 'https://creativecommons.org/publicdomain/zero/1.0/',
+  )
+  const source = safeExternalUrl(
+    manifest?.source ?? 'https://huggingface.co/datasets/CanCLID/zoengjyutgaai',
+  )
 
   return (
     <div className="page about">
