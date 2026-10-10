@@ -277,9 +277,9 @@ const en: Messages = {
   'notFound.body': 'Head back to the episodes and keep listening.',
   'about.title': 'About this site',
   'about.intro':
-    'Savor the Three Kingdoms, learn Cantonese. This site builds on Zhang Yuekai’s Romance of the Three Kingdoms storytelling — beloved across the Cantonese-speaking world, and known to listeners simply as Uncle Kai telling tales — so you can taste how Cantonese is at once classical and wickedly vivid, and pick up modern Jyutping romanization from a classic along the way.',
+    'Savor the Three Kingdoms, learn Cantonese. This site presents Zhang Yuekai’s legendary Romance of the Three Kingdoms storytelling — known affectionately as Uncle Kai telling tales across the Cantonese-speaking world. Discover how Cantonese blends classical elegance with vivid expressiveness, while learning modern Jyutping romanization through a timeless epic.',
   'about.usage':
-    'Everything here is published only to promote Chinese culture, under the open-license terms of its sources. If any content is a problem, please contact ',
+    'All content is shared for educational and cultural promotion purposes, under the terms of its original open licenses. Questions? Contact ',
   'about.dataset.title': 'Corpus sources',
   'about.dataset.before':
     'The Cantonese storytelling audio and the Traditional Chinese scripts on this site come from the Hugging Face community dataset ',

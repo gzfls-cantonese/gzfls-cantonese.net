@@ -70,7 +70,7 @@ describe('AboutPage', () => {
 
     expect(screen.getByRole('heading', { name: 'About this site' })).toBeInTheDocument()
     expect(screen.getByText(/Savor the Three Kingdoms, learn Cantonese/)).toBeInTheDocument()
-    expect(screen.getByText(/only to promote Chinese culture/)).toBeInTheDocument()
+    expect(screen.getByText(/for educational and cultural promotion purposes/)).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Corpus sources' })).toBeInTheDocument()
     expect(screen.getByText(/come from the Hugging Face community dataset/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Dataset homepage' })).toBeInTheDocument()
