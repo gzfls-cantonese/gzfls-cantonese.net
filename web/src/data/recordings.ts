@@ -8,6 +8,7 @@
  * are abortable (needed when a trial is disposed mid-upload).
  */
 import { RECORDINGS_API } from '../config'
+import { hasSecureRandom } from './recorder'
 
 const ANON_KEY = 'sanguo.recordings.anonId'
 const MAX_ATTEMPTS = 3
@@ -57,21 +58,30 @@ export function extForMime(mime: string): string | null {
   return EXT_BY_MIME[mime] ?? null
 }
 
-function uuidv4(): string {
+/**
+ * A UUID v4, or null when no cryptographically secure source is available.
+ * There is deliberately no Math.random fallback: a guessable anon id is an IDOR
+ * into another visitor's transcripts and delete route, so the feature must turn
+ * off instead of degrading to a weak identity.
+ */
+function uuidv4(): string | null {
   const c = globalThis.crypto
-  if (c && typeof c.randomUUID === 'function') return c.randomUUID()
-  // Fallback for environments without randomUUID (insecure but well-formed).
+  if (!hasSecureRandom() || !c) return null
+  if (typeof c.randomUUID === 'function') return c.randomUUID()
+  if (typeof c.getRandomValues !== 'function') return null
   const bytes = new Uint8Array(16)
-  if (c && typeof c.getRandomValues === 'function') c.getRandomValues(bytes)
-  else for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256)
+  c.getRandomValues(bytes)
   bytes[6] = (bytes[6]! & 0x0f) | 0x40
   bytes[8] = (bytes[8]! & 0x3f) | 0x80
   const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
-/** Stable per-device anon id: generated once, then persisted in localStorage. */
-export function getAnonId(): string {
+/**
+ * Stable per-device anon id: generated once, then persisted in localStorage.
+ * Null when no secure source exists — callers must not send a request without it.
+ */
+export function getAnonId(): string | null {
   let id: string | null = null
   try {
     id = localStorage.getItem(ANON_KEY)
@@ -80,6 +90,7 @@ export function getAnonId(): string {
   }
   if (!id) {
     id = uuidv4()
+    if (!id) return null
     try {
       localStorage.setItem(ANON_KEY, id)
     } catch {
@@ -118,9 +129,13 @@ export class RecordingsError extends Error {
 }
 
 async function postJson<T>(path: string, body: unknown, init?: RequestInit): Promise<T> {
+  const anon = getAnonId()
+  if (!anon) {
+    throw new Error('recordings unavailable: no secure random source for the anonymous id')
+  }
   const res = await fetch(apiUrl(path), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Anon-Id': getAnonId() },
+    headers: { 'Content-Type': 'application/json', 'X-Anon-Id': anon },
     body: JSON.stringify(body),
     ...init,
   })
@@ -163,6 +178,13 @@ export function assessRecording(
 }
 
 /**
+ * Most items one /dispose request may name. Mirrors MAX_DISPOSE_ITEMS in
+ * server/recordings/config.mjs, which refuses a longer list outright — the two
+ * have to move together.
+ */
+const MAX_DISPOSE_ITEMS = 100
+
+/**
  * Delete the given recordings. `keepalive` survives page unload (pagehide).
  * Returns the number the server reported as deleted.
  */
@@ -171,18 +193,27 @@ export async function disposeRecordings(
   opts: { keepalive?: boolean; signal?: AbortSignal } = {},
 ): Promise<number> {
   if (!items.length) return 0
-  try {
-    const out = await postJson<{ deleted: number }>(
-      '/dispose',
-      { items },
-      { keepalive: opts.keepalive, signal: opts.signal },
-    )
-    return out.deleted
-  } catch {
-    // A failed dispose is non-fatal: the server-side lifecycle rule is the
-    // backstop. Swallow so unload/route-change cleanup never throws.
-    return 0
+  // A cleanup longer than the cap walks sequential chunks. Under pagehide there
+  // is no time for that, so send the first chunk and let the server-side
+  // lifecycle rule collect whatever is left.
+  const pending = opts.keepalive ? items.slice(0, MAX_DISPOSE_ITEMS) : items
+  let deleted = 0
+  for (let i = 0; i < pending.length; i += MAX_DISPOSE_ITEMS) {
+    try {
+      const out = await postJson<{ deleted: number }>(
+        '/dispose',
+        { items: pending.slice(i, i + MAX_DISPOSE_ITEMS) },
+        { keepalive: opts.keepalive, signal: opts.signal },
+      )
+      deleted += out.deleted
+    } catch {
+      // A failed dispose is non-fatal: the server-side lifecycle rule is the
+      // backstop. Swallow so unload/route-change cleanup never throws, and stop
+      // walking — the next chunk would fail the same way.
+      break
+    }
   }
+  return deleted
 }
 
 /** What a finished upload leaves behind: the cloud descriptor plus whether the server can score it. */

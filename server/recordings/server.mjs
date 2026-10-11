@@ -18,7 +18,9 @@ const MAX_BODY_BYTES = 1_048_576
 const cfg = loadConfig()
 const backend = createBackend(cfg)
 // Built once so the reference-loader cache and the rate-limit counters survive
-// across requests within this instance.
+// across requests within this instance. Two limiter instances: scoring bills ASR
+// and gets its own budget, while presign and dispose bill storage requests and
+// share one, so re-recording cannot eat into a caller's scoring allowance.
 const deps = {
   assess: createAssessService(cfg, backend, {
     transcriber: createTranscriber(cfg),
@@ -26,6 +28,7 @@ const deps = {
     dict: loadJyutpingDict(),
   }),
   limiter: createRateLimiter(cfg),
+  presignLimiter: createRateLimiter(cfg, { scope: 'presign' }),
 }
 
 const server = createServer(async (req, res) => {

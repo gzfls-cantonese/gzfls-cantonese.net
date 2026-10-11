@@ -1,4 +1,6 @@
 pyarrow==25.0.1
 pyjyutping==1.0.0
 pytest==9.1.1
-fontTools==4.46.0
+# Floor, not a preference: CVE-2025-66034 (arbitrary file write from a malicious
+# .designspace) is unfixed below 4.60.2.
+fontTools==4.60.2

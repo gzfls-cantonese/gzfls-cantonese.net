@@ -56,3 +56,28 @@ jobs:
       # runs straight off the checkout.
       - name: Unit tests
         run: npm test
+
+  pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: tools/pipeline/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r tools/pipeline/requirements.txt
+
+      - name: Unit tests
+        run: pytest -q
+        working-directory: tools/pipeline
+
+      # Last on purpose, for the same reason as the web job: an advisory fails the
+      # run, so putting it first would let it mask whether the pipeline still
+      # works. Resolves the transitive tree, matching what `npm audit` covers.
+      - name: Dependency security audit
+        run: |
+          pip install pip-audit
+          pip-audit -r tools/pipeline/requirements.txt

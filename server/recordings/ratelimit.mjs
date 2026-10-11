@@ -1,11 +1,17 @@
 /**
- * Best-effort, in-memory fixed-window rate limiter for the scoring route.
+ * Best-effort, in-memory fixed-window rate limiter.
  *
- * The scoring call bills a real ASR request, so abuse (a scripted client
- * hammering /assess) is a direct cost. We cap it along three dimensions — the
- * anon id, the client IP, and the whole instance — each over fixed windows. A
- * request is allowed only if every applicable counter is still under its limit;
- * then all counters advance. A limit of 0 disables that window.
+ * One instance per capped route, selected by `scope`: 'assess' (default) reads
+ * cfg.assess, 'presign' reads cfg.presign. Separate instances means separate
+ * budgets and separate counter maps, so re-recording a sentence cannot eat into
+ * a caller's scoring allowance.
+ *
+ * A route is capped because abusing it costs money: scoring bills a real ASR
+ * request, while presign and dispose each bill storage requests and create or
+ * destroy an object. We cap along three dimensions — the anon id, the client IP,
+ * and the whole instance — each over fixed windows. A request is allowed only if
+ * every applicable counter is still under its limit; then all counters advance.
+ * A limit of 0 disables that window.
  *
  * The per-identity dimensions are both attacker-controlled: anon ids are minted
  * by the client and carry no signature, and X-Forwarded-For is a request header.
@@ -25,11 +31,11 @@ const MAX_ENTRIES = 20_000
 // an attacker rotating identities could reset the only cap they cannot dodge.
 const GLOBAL_KEY = 'g:all'
 
-export function createRateLimiter(cfg, { now = Date.now, maxEntries = MAX_ENTRIES } = {}) {
-  const assess = (cfg && cfg.assess) || {}
-  const hourly = assess.rateHourly > 0 ? assess.rateHourly : 0
-  const daily = assess.rateDaily > 0 ? assess.rateDaily : 0
-  const globalHourly = assess.rateGlobalHourly > 0 ? assess.rateGlobalHourly : 0
+export function createRateLimiter(cfg, { now = Date.now, maxEntries = MAX_ENTRIES, scope = 'assess' } = {}) {
+  const limits = (cfg && cfg[scope]) || {}
+  const hourly = limits.rateHourly > 0 ? limits.rateHourly : 0
+  const daily = limits.rateDaily > 0 ? limits.rateDaily : 0
+  const globalHourly = limits.rateGlobalHourly > 0 ? limits.rateGlobalHourly : 0
   const counts = new Map()
 
   function entry(key, t) {

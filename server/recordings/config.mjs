@@ -73,6 +73,36 @@ export function loadConfig(env = process.env) {
       // multiplies it by the number of warm instances.
       rateGlobalHourly: Number(env.ASSESS_RATE_GLOBAL_HOURLY ?? 200),
     },
+    // The two routes that create and destroy objects are anonymously reachable
+    // too, and each one bills storage requests, so they get their own budget.
+    // Presign is far more generous than scoring: re-recording a sentence is
+    // normal use and costs storage requests rather than billable ASR seconds.
+    // Kept separate from the assess caps so a caller cannot exhaust its scoring
+    // allowance just by re-recording.
+    presign: {
+      rateHourly: Number(env.PRESIGN_RATE_HOURLY ?? 60),
+      rateDaily: Number(env.PRESIGN_RATE_DAILY ?? 600),
+      rateGlobalHourly: Number(env.PRESIGN_RATE_GLOBAL_HOURLY ?? 2000),
+    },
+  }
+  // The local backend has to serve an unauthenticated PUT so the flow can run
+  // without cloud credentials. Selecting it in an environment that also carries
+  // production credentials would silently expose that write route in production,
+  // so refuse to start instead of picking a winner.
+  if (localDir) {
+    const alsoSet = [
+      ['OSS_BUCKET', bucket],
+      ['OSS_ENDPOINT', env.OSS_ENDPOINT],
+      ['OSS_ACCESS_KEY_ID', env.OSS_ACCESS_KEY_ID],
+      ['OSS_ACCESS_KEY_SECRET', env.OSS_ACCESS_KEY_SECRET],
+    ].filter(([, v]) => v).map(([k]) => k)
+    if (alsoSet.length) {
+      throw new Error(
+        'recordings fn: RECORDINGS_LOCAL_DIR is set alongside production storage credentials '
+        + `(${alsoSet.join(', ')}); the local backend serves an unauthenticated write route `
+        + 'and must not run in production — unset one side',
+      )
+    }
   }
   if (cfg.backend === 'oss') {
     const missing = ['bucket', 'endpoint', 'accessKeyId', 'accessKeySecret'].filter((k) => !cfg[k])
@@ -104,6 +134,12 @@ export function assessAvailable(cfg, backendKind) {
 export const ANON_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 export const ENTRY_ID_RE = /^[A-Za-z0-9_-]{1,64}$/
 export const REC_ID_RE = /^[A-Za-z0-9-]{4,64}$/
+/**
+ * Most recordings one /dispose may name. Each item becomes a sequential
+ * authenticated delete, so an unbounded list lets one anonymous request hold the
+ * instance; 100 covers a real session and the client chunks anything longer.
+ */
+export const MAX_DISPOSE_ITEMS = 100
 // Null prototype on purpose: this is an exact-key lookup over an attacker-
 // supplied mime string, and on a plain literal `EXT_BY_MIME['constructor']`
 // returns Object's constructor — truthy, so the lookup would pass validation.

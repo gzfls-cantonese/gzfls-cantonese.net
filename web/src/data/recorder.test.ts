@@ -3,6 +3,7 @@ import {
   MIME_CHAIN,
   RecordSession,
   attachLongPress,
+  hasSecureRandom,
   isRecordingSupported,
   pickMime,
 } from './recorder'
@@ -53,6 +54,17 @@ describe('capability detection', () => {
     expect(isRecordingSupported()).toBe(false)
     stubMedia(['audio/opus'])
     expect(isRecordingSupported()).toBe(true)
+  })
+
+  it('isRecordingSupported is false without a secure random source', () => {
+    stubMedia(['audio/opus'])
+    expect(hasSecureRandom()).toBe(true)
+    // The anon id is the only thing separating one visitor's recordings and
+    // transcripts from another's, so the feature turns off rather than minting a
+    // guessable identity.
+    vi.stubGlobal('crypto', undefined)
+    expect(hasSecureRandom()).toBe(false)
+    expect(isRecordingSupported()).toBe(false)
   })
 
   it('pickMime returns the first supported mime from the fallback chain', () => {

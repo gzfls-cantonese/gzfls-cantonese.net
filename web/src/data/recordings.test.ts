@@ -29,6 +29,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
   vi.useRealTimers()
 })
 
@@ -39,6 +40,22 @@ describe('getAnonId', () => {
     expect(a).toMatch(ANON_RE)
     expect(b).toBe(a)
     expect(localStorage.getItem('sanguo.recordings.anonId')).toBe(a)
+  })
+
+  it('refuses to mint an id without a secure random source', () => {
+    vi.stubGlobal('crypto', undefined)
+    expect(getAnonId()).toBeNull()
+    expect(localStorage.getItem('sanguo.recordings.anonId')).toBeNull()
+  })
+
+  it('sends no request without a secure random source', async () => {
+    vi.stubGlobal('crypto', undefined)
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+    await expect(
+      presignUpload({ episode: 1, entryId: 'e1', durationSec: 5, mime: 'audio/opus' }),
+    ).rejects.toThrow(/no secure random source/)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
 
@@ -251,5 +268,45 @@ describe('disposeRecordings', () => {
     expect(
       await disposeRecordings([{ episode: 1, entryId: 'e1', recId: 'r1', ext: 'opus' }]),
     ).toBe(0)
+  })
+
+  const manyItems = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ episode: 1, entryId: `e${i}`, recId: `r${i}`, ext: 'opus' }))
+
+  const chunkSizes = (fetchMock: { mock: { calls: unknown[][] } }) =>
+    fetchMock.mock.calls.map((call) => {
+      const init = call[1] as RequestInit
+      return (JSON.parse(String(init.body)) as { items: unknown[] }).items.length
+    })
+
+  it('splits a long cleanup into chunks the server will accept', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      const body = JSON.parse(String((init as RequestInit).body)) as { items: unknown[] }
+      return json({ deleted: body.items.length })
+    })
+
+    expect(await disposeRecordings(manyItems(250))).toBe(250)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(chunkSizes(fetchMock)).toEqual([100, 100, 50])
+  })
+
+  it('stops walking chunks once one fails', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json({ deleted: 100 }))
+      .mockRejectedValueOnce(new TypeError('network'))
+
+    expect(await disposeRecordings(manyItems(250))).toBe(100)
+    // The third chunk would fail the same way, so it is not attempted.
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('sends one chunk under pagehide, where there is no time to walk', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      const body = JSON.parse(String((init as RequestInit).body)) as { items: unknown[] }
+      return json({ deleted: body.items.length })
+    })
+
+    expect(await disposeRecordings(manyItems(250), { keepalive: true })).toBe(100)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

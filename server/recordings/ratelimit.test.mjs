@@ -141,3 +141,37 @@ test('eviction never resets the instance-wide counter', () => {
   assert.equal(denied.ok, false, 'the global cap survived 50 evictions')
   assert.ok(denied.retryAfterSec > 0 && denied.retryAfterSec <= 3600)
 })
+
+test('scope picks the budget, and two scopes do not share one', () => {
+  const clk = clock()
+  const cfg = {
+    assess: { rateHourly: 1, rateDaily: 0, rateGlobalHourly: 0 },
+    presign: { rateHourly: 3, rateDaily: 0, rateGlobalHourly: 0 },
+  }
+  const scoring = createRateLimiter(cfg, { now: clk.now })
+  const objects = createRateLimiter(cfg, { scope: 'presign', now: clk.now })
+
+  assert.equal(scoring.consume({ anon: 'a' }).ok, true)
+  assert.equal(scoring.consume({ anon: 'a' }).ok, false, 'the scoring cap is 1')
+  assert.equal(objects.consume({ anon: 'a' }).ok, true, 're-recording draws a different budget')
+  assert.equal(objects.consume({ anon: 'a' }).ok, true)
+  assert.equal(objects.consume({ anon: 'a' }).ok, true)
+  assert.equal(objects.consume({ anon: 'a' }).ok, false, 'the object cap is 3')
+})
+
+test('each scope keeps its own instance-wide counter', () => {
+  const clk = clock()
+  const cfg = { assess: { rateGlobalHourly: 1 }, presign: { rateGlobalHourly: 1 } }
+  const scoring = createRateLimiter(cfg, { now: clk.now })
+  const objects = createRateLimiter(cfg, { scope: 'presign', now: clk.now })
+
+  assert.equal(scoring.consume({ anon: 'x' }).ok, true)
+  assert.equal(scoring.consume({ anon: 'y' }).ok, false, 'the scoring global cap is spent')
+  assert.equal(objects.consume({ anon: 'y' }).ok, true, 'the object global cap is its own')
+})
+
+test('a scope with no configured limits lets everything through', () => {
+  const missing = createRateLimiter({ assess: { rateHourly: 1 } }, { scope: 'presign' })
+  assert.equal(missing.enabled, false)
+  assert.equal(missing.consume({ anon: 'a' }).ok, true)
+})

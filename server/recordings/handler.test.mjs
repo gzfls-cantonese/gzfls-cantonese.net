@@ -10,10 +10,15 @@ import { createAssessService } from './assess.mjs'
 import { createTranscriber } from './asr.mjs'
 import { createBackend } from './backend.mjs'
 import { handle } from './handler.mjs'
+import { MAX_DISPOSE_ITEMS } from './config.mjs'
 import { createRateLimiter } from './ratelimit.mjs'
 
 const ANON_A = '11111111-1111-4111-8111-111111111111'
 const ANON_B = '22222222-2222-4222-8222-222222222222'
+// Mixed-case hex, so canonicalisation is observable: ANON_A and ANON_B are all
+// digits and would pass through a case change untouched.
+const ANON_MIXED = 'aAbBcCdD-1234-4abc-8def-abcdefabcdef'
+const ANON_MIXED_LOWER = ANON_MIXED.toLowerCase()
 const ALLOWED_ORIGIN = 'https://gzfls-cantonese.net'
 
 async function setup() {
@@ -298,4 +303,115 @@ test('no list or download route exists', async () => {
     assert.equal((await handle(cfg, backend, req('POST', p, { 'x-anon-id': ANON_A }, '{}'), deps)).status, 404, p)
   }
   assert.equal((await handle(cfg, backend, req('GET', '/assess'), deps)).status, 405)
+})
+
+test('letter case cannot multiply one anon id into many budgets', async () => {
+  const { cfg, backend } = await setup()
+  cfg.presign = { rateHourly: 2, rateDaily: 0, rateGlobalHourly: 0 }
+  const deps = { presignLimiter: createRateLimiter(cfg, { scope: 'presign' }) }
+  const body = JSON.stringify({ episode: 1, entryId: 'e1', durationSec: 5 })
+  const call = (anon) => handle(cfg, backend, req('POST', '/presign-upload', { 'x-anon-id': anon }, body), deps)
+
+  assert.equal((await call(ANON_MIXED)).status, 200)
+  assert.equal((await call(ANON_MIXED_LOWER)).status, 200)
+  const third = await call(ANON_MIXED.toUpperCase())
+  assert.equal(third.status, 429, 'one identity spelled three ways is still one budget')
+  assert.equal(JSON.parse(third.body).error, 'rate limited')
+})
+
+test('case variants of one anon id address one storage prefix', async () => {
+  const { cfg, backend, dir } = await setup()
+  const presign = await handle(cfg, backend, req('POST', '/presign-upload', { 'x-anon-id': ANON_MIXED.toUpperCase() }, JSON.stringify({
+    episode: 1, entryId: 'e1', durationSec: 5,
+  })))
+  const { key, recId } = JSON.parse(presign.body)
+  assert.ok(key.startsWith(`recordings/${ANON_MIXED_LOWER}/`), key)
+  await handle(cfg, backend, req('PUT', `/local-put/${key}`, {}, 'blob'))
+
+  // Disposing with the opposite spelling still finds it, so canonicalising does
+  // not orphan a recording made before the change.
+  const dispose = await handle(cfg, backend, req('POST', '/dispose', { 'x-anon-id': ANON_MIXED_LOWER }, JSON.stringify({
+    items: [{ episode: 1, entryId: 'e1', recId, ext: key.split('.').pop() }],
+  })))
+  assert.equal(JSON.parse(dispose.body).deleted, 1)
+  await assert.rejects(readFile(path.join(dir, key)))
+})
+
+test('presign-upload is capped before a signature is issued', async () => {
+  const { cfg, backend } = await setup()
+  cfg.presign = { rateHourly: 2, rateDaily: 0, rateGlobalHourly: 0 }
+  const deps = { presignLimiter: createRateLimiter(cfg, { scope: 'presign' }) }
+  const call = () => handle(cfg, backend, req('POST', '/presign-upload', { 'x-anon-id': ANON_A }, JSON.stringify({
+    episode: 1, entryId: 'e1', durationSec: 5,
+  })), deps)
+
+  assert.equal((await call()).status, 200)
+  assert.equal((await call()).status, 200)
+  const denied = await call()
+  assert.equal(denied.status, 429)
+  assert.equal(JSON.parse(denied.body).error, 'rate limited')
+  assert.ok(Number(denied.headers['retry-after']) > 0, 'Retry-After is a positive number of seconds')
+  assert.equal(JSON.parse(denied.body).uploadUrl, undefined, 'a capped request gets no signature')
+})
+
+test('dispose is capped before any delete happens', async () => {
+  const { cfg, backend, dir } = await setup()
+  const first = await record(cfg, backend, ANON_A, 1, 'e1')
+  const second = await record(cfg, backend, ANON_A, 2, 'e2')
+  const keyOf = (ep, entry, r) => `recordings/${ANON_A}/${ep}_${entry}_${r.recId}.${r.ext}`
+
+  cfg.presign = { rateHourly: 1, rateDaily: 0, rateGlobalHourly: 0 }
+  const deps = { presignLimiter: createRateLimiter(cfg, { scope: 'presign' }) }
+  const dispose = (r, ep, entry) => handle(cfg, backend, req('POST', '/dispose', { 'x-anon-id': ANON_A }, JSON.stringify({
+    items: [{ episode: ep, entryId: entry, recId: r.recId, ext: r.ext }],
+  })), deps)
+
+  assert.equal(JSON.parse((await dispose(first, 1, 'e1')).body).deleted, 1)
+  const denied = await dispose(second, 2, 'e2')
+  assert.equal(denied.status, 429)
+  assert.equal(JSON.parse(denied.body).error, 'rate limited')
+  // The capped request deleted nothing.
+  await readFile(path.join(dir, keyOf(2, 'e2', second)))
+})
+
+test('the object-mutation budget is separate from the scoring budget', async () => {
+  const { cfg, backend, deps, calls } = await assessSetup()
+  cfg.presign = { rateHourly: 1, rateDaily: 0, rateGlobalHourly: 0 }
+  cfg.assess.rateHourly = 5
+  cfg.assess.rateDaily = 0
+  cfg.assess.rateGlobalHourly = 0
+  deps.presignLimiter = createRateLimiter(cfg, { scope: 'presign' })
+  deps.limiter = createRateLimiter(cfg)
+
+  const body = JSON.stringify({ episode: 1, entryId: 'e1', durationSec: 5 })
+  const presign = () => handle(cfg, backend, req('POST', '/presign-upload', { 'x-anon-id': ANON_A }, body), deps)
+  assert.equal((await presign()).status, 200)
+  assert.equal((await presign()).status, 429, 're-recording has exhausted the object budget')
+
+  const { recId, ext } = await record(cfg, backend, ANON_A, 1, 'e1')
+  const scored = await handle(cfg, backend, req('POST', '/assess', { 'x-anon-id': ANON_A }, JSON.stringify({
+    episode: 1, entryId: 'e1', recId, ext,
+  })), deps)
+  assert.equal(scored.status, 200, 'scoring still has its own allowance')
+  assert.equal(calls.reference.length, 1)
+})
+
+test('dispose refuses a body naming more items than the cap', async () => {
+  const { cfg, backend, dir } = await setup()
+  const rec = await record(cfg, backend, ANON_A, 1, 'e1')
+  const key = `recordings/${ANON_A}/1_e1_${rec.recId}.${rec.ext}`
+  const item = { episode: 1, entryId: 'e1', recId: rec.recId, ext: rec.ext }
+
+  const over = await handle(cfg, backend, req('POST', '/dispose', { 'x-anon-id': ANON_A }, JSON.stringify({
+    items: Array.from({ length: MAX_DISPOSE_ITEMS + 1 }, () => item),
+  })))
+  assert.equal(over.status, 400)
+  assert.equal(JSON.parse(over.body).error, 'too many items')
+  // Refused outright, not partially applied.
+  await readFile(path.join(dir, key))
+
+  const atCap = await handle(cfg, backend, req('POST', '/dispose', { 'x-anon-id': ANON_A }, JSON.stringify({
+    items: Array.from({ length: MAX_DISPOSE_ITEMS }, () => item),
+  })))
+  assert.equal(atCap.status, 200, 'exactly the cap is still accepted')
 })

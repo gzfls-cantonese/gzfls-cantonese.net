@@ -132,6 +132,25 @@ test('loadConfig derives the dataset base from the OSS config', () => {
   assert.equal(local.assess.datasetBase, '', 'no bucket/endpoint to derive from')
 })
 
+test('loadConfig refuses the local backend alongside production credentials', () => {
+  const oss = {
+    OSS_BUCKET: 'b', OSS_ENDPOINT: 'e', OSS_ACCESS_KEY_ID: 'i', OSS_ACCESS_KEY_SECRET: 's',
+  }
+  assert.equal(loadConfig({ RECORDINGS_LOCAL_DIR: '/tmp/x' }).backend, 'local')
+  assert.equal(loadConfig(oss).backend, 'oss')
+
+  const both = () => loadConfig({ ...oss, RECORDINGS_LOCAL_DIR: '/tmp/x' })
+  assert.throws(both, /RECORDINGS_LOCAL_DIR/)
+  assert.throws(both, /OSS_BUCKET/, 'the message names the production side too')
+
+  // One stray credential is enough to refuse: the local backend's write route is
+  // unauthenticated, so this must fail at startup rather than pick a winner.
+  assert.throws(
+    () => loadConfig({ RECORDINGS_LOCAL_DIR: '/tmp/x', OSS_ACCESS_KEY_SECRET: 's' }),
+    /OSS_ACCESS_KEY_SECRET/,
+  )
+})
+
 test('loadConfig defaults the CORS allow-list and honours an override', () => {
   const cfg = loadConfig({
     OSS_BUCKET: 'b', OSS_ENDPOINT: 'e', OSS_ACCESS_KEY_ID: 'i', OSS_ACCESS_KEY_SECRET: 's',
@@ -145,4 +164,20 @@ test('loadConfig defaults the CORS allow-list and honours an override', () => {
     RECORDINGS_ALLOWED_ORIGINS: 'https://a.example, https://b.example/ ,',
   })
   assert.deepEqual(overridden.allowedOrigins, ['https://a.example', 'https://b.example'])
+})
+
+test('loadConfig defaults the object-mutation caps separately from scoring', () => {
+  const oss = {
+    OSS_BUCKET: 'b', OSS_ENDPOINT: 'e', OSS_ACCESS_KEY_ID: 'i', OSS_ACCESS_KEY_SECRET: 's',
+  }
+  const cfg = loadConfig(oss)
+  assert.deepEqual(cfg.presign, { rateHourly: 60, rateDaily: 600, rateGlobalHourly: 2000 })
+  assert.equal(cfg.assess.rateHourly, 10, 'the scoring budget keeps its own defaults')
+
+  const tuned = loadConfig({
+    ...oss,
+    PRESIGN_RATE_HOURLY: '5', PRESIGN_RATE_DAILY: '0', PRESIGN_RATE_GLOBAL_HOURLY: '50',
+  })
+  assert.deepEqual(tuned.presign, { rateHourly: 5, rateDaily: 0, rateGlobalHourly: 50 })
+  assert.equal(tuned.assess.rateHourly, 10, 'presign knobs do not reach into assess')
 })

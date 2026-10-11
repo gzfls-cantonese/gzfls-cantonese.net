@@ -14,12 +14,24 @@ export const MIME_CHAIN = [
   'audio/mp4',
 ]
 
+/**
+ * Whether a cryptographically secure random source exists. The anon id is the
+ * only thing separating one visitor's recordings from another's, so where there
+ * is none the feature stays off instead of falling back to a guessable id.
+ */
+export function hasSecureRandom(): boolean {
+  const c = globalThis.crypto
+  if (!c) return false
+  return typeof c.randomUUID === 'function' || typeof c.getRandomValues === 'function'
+}
+
 export function isRecordingSupported(): boolean {
   return (
     typeof MediaRecorder !== 'undefined' &&
     typeof navigator !== 'undefined' &&
     !!navigator.mediaDevices &&
-    typeof navigator.mediaDevices.getUserMedia === 'function'
+    typeof navigator.mediaDevices.getUserMedia === 'function' &&
+    hasSecureRandom()
   )
 }
 

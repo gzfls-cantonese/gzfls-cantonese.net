@@ -3,19 +3,21 @@
  *
  * Routes:
  *   OPTIONS *                      -> 204 + CORS headers
- *   POST /presign-upload           -> 200 {recId, uploadUrl, key, assessAvailable}
- *   POST /dispose                  -> 200 {deleted}
- *   POST /assess                   -> 200 {score, transcript}
+ *   POST /presign-upload           -> 200 {recId, uploadUrl, key, assessAvailable} / 429
+ *   POST /dispose                  -> 200 {deleted} / 400 too many items / 429
+ *   POST /assess                   -> 200 {score, transcript} / 429
  *   PUT  /local-put/<key>          -> local backend only (dev/e2e)
  *   anything else                  -> 404 / 405
  *
- * Security: the anon id arrives only in the X-Anon-Id header; object keys are
- * always built under that anon prefix, so a client can never address another
- * anon's objects. Cross-origin reads are limited to cfg.allowedOrigins.
+ * Security: the anon id arrives only in the X-Anon-Id header, is canonicalised to
+ * lowercase once validated, and object keys are always built under that anon
+ * prefix, so a client can never address another anon's objects. All three
+ * mutating routes are rate limited before any billable work. Cross-origin reads
+ * are limited to cfg.allowedOrigins.
  */
 import { randomBytes } from 'node:crypto'
 import { assertUnderPrefix } from './backend.mjs'
-import { ANON_ID_RE, ENTRY_ID_RE, EXT_BY_MIME, REC_ID_RE, assessAvailable } from './config.mjs'
+import { ANON_ID_RE, ENTRY_ID_RE, EXT_BY_MIME, MAX_DISPOSE_ITEMS, REC_ID_RE, assessAvailable } from './config.mjs'
 
 const KNOWN_ROUTES = ['/presign-upload', '/dispose', '/assess']
 const KNOWN_EXTS = Object.values(EXT_BY_MIME)
@@ -102,9 +104,26 @@ export async function handle(cfg, backend, req, deps = {}) {
     return json(405, { error: 'method not allowed' }, cors)
   }
 
-  const anon = req.headers['x-anon-id'] || ''
-  if (!ANON_ID_RE.test(anon)) {
+  const rawAnon = req.headers['x-anon-id'] || ''
+  if (!ANON_ID_RE.test(rawAnon)) {
     return json(403, { error: 'missing or invalid X-Anon-Id' }, cors)
+  }
+  // Canonicalise after validating, never instead of it. The pattern is
+  // case-insensitive but the value feeds both the rate-limit key and the storage
+  // prefix, so one identity re-spelled in different letter cases would count as
+  // many and multiply every per-anon budget. Conformant clients mint lowercase
+  // ids via crypto.randomUUID(), so nothing already stored moves.
+  const anon = rawAnon.toLowerCase()
+
+  /**
+   * Consume one unit of a route's budget, or the 429 to answer with. Called
+   * before any signature is issued, object deleted or ASR billed.
+   */
+  const capped = (limiter) => {
+    if (!limiter) return null
+    const verdict = limiter.consume({ anon, ip: clientIp(req) })
+    if (verdict.ok) return null
+    return json(429, { error: 'rate limited' }, { ...cors, 'retry-after': String(verdict.retryAfterSec) })
   }
 
   let payload
@@ -126,6 +145,12 @@ export async function handle(cfg, backend, req, deps = {}) {
     }
     const ext = EXT_BY_MIME[mime]
     if (!ext) return json(400, { error: 'unsupported mime' }, cors)
+    // Every signature makes one more distinct object writable and costs a billed
+    // storage request, so this route is capped too. It shares the object-mutation
+    // budget with /dispose: neither bills ASR, and a separate budget for each
+    // would just double what one anonymous caller gets.
+    const denied = capped(deps.presignLimiter)
+    if (denied) return denied
     const recId = `${Date.now().toString(36)}-${randomBytes(6).toString('hex')}`
     const key = buildKey(cfg, anon, episode, entryId, recId, ext)
     const uploadUrl = backend.putPresign(key, cfg.presignTtlSec, mime)
@@ -146,12 +171,8 @@ export async function handle(cfg, backend, req, deps = {}) {
       return json(503, { error: 'scoring unavailable' }, cors)
     }
     // Cap scoring frequency before touching storage or billing an ASR call.
-    if (deps.limiter) {
-      const verdict = deps.limiter.consume({ anon, ip: clientIp(req) })
-      if (!verdict.ok) {
-        return json(429, { error: 'rate limited' }, { ...cors, 'retry-after': String(verdict.retryAfterSec) })
-      }
-    }
+    const denied = capped(deps.limiter)
+    if (denied) return denied
     const key = buildKey(cfg, anon, episode, entryId, recId, ext)
     let found
     try {
@@ -170,6 +191,14 @@ export async function handle(cfg, backend, req, deps = {}) {
 
   // /dispose
   const items = Array.isArray(payload.items) ? payload.items : []
+  // Every item becomes a sequential authenticated delete, so one anonymous
+  // request must not be able to name an unbounded list and hold the instance.
+  // Refuse the whole request rather than deleting a prefix of it.
+  if (items.length > MAX_DISPOSE_ITEMS) {
+    return json(400, { error: 'too many items' }, cors)
+  }
+  const deniedDispose = capped(deps.presignLimiter)
+  if (deniedDispose) return deniedDispose
   let deleted = 0
   for (const it of items) {
     const episode = Number(it.episode)
