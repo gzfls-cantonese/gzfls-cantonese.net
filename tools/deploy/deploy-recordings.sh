@@ -26,6 +26,8 @@
 #   optional (documented defaults shown):
 #     RECORDINGS_PREFIX(recordings)  RECORDINGS_MAX_DURATION(60)
 #     RECORDINGS_PRESIGN_TTL(300)    PORT(8788)
+#     PRESIGN_RATE_HOURLY(60)        PRESIGN_RATE_DAILY(600)
+#     PRESIGN_RATE_GLOBAL_HOURLY(2000)
 #
 # Secrets (OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET) are NEVER written to the
 # manifest nor echoed; the manifest references them by name for the operator to
@@ -49,6 +51,8 @@ env manifest, and copy-paste deploy commands for the operator to run.
 Env (reused from the site deploy):
   required for the oss backend: OSS_BUCKET OSS_ENDPOINT OSS_ACCESS_KEY_ID OSS_ACCESS_KEY_SECRET
   optional: RECORDINGS_PREFIX(recordings) RECORDINGS_MAX_DURATION(60) RECORDINGS_PRESIGN_TTL(300) PORT(8788)
+  optional (rate limits, 0 disables a window):
+    PRESIGN_RATE_HOURLY(60) PRESIGN_RATE_DAILY(600) PRESIGN_RATE_GLOBAL_HOURLY(2000)
 
 Secrets are never written to disk or echoed.
 EOF
@@ -82,6 +86,12 @@ PREFIX="${RECORDINGS_PREFIX:-recordings}"
 MAXDUR="${RECORDINGS_MAX_DURATION:-60}"
 TTL="${RECORDINGS_PRESIGN_TTL:-300}"
 PORT="${PORT:-8788}"
+# Always written as an explicit number: config.mjs treats an EMPTY string here as
+# `0`, which silently switches the window off, so the manifest must never emit
+# `PRESIGN_RATE_HOURLY=` with a blank value.
+PRE_HOURLY="${PRESIGN_RATE_HOURLY:-60}"
+PRE_DAILY="${PRESIGN_RATE_DAILY:-600}"
+PRE_GLOBAL="${PRESIGN_RATE_GLOBAL_HOURLY:-2000}"
 
 have() { [[ -n "${!1:-}" ]]; }
 mask() { if have "$1"; then echo "set (masked)"; else echo "MISSING"; fi; }
@@ -112,6 +122,9 @@ OSS_ACCESS_KEY_SECRET=__SET_IN_SECRET_STORE__
 RECORDINGS_PREFIX=${PREFIX}
 RECORDINGS_MAX_DURATION=${MAXDUR}
 RECORDINGS_PRESIGN_TTL=${TTL}
+PRESIGN_RATE_HOURLY=${PRE_HOURLY}
+PRESIGN_RATE_DAILY=${PRE_DAILY}
+PRESIGN_RATE_GLOBAL_HOURLY=${PRE_GLOBAL}
 PORT=${PORT}
 EOF
 }
@@ -150,15 +163,18 @@ echo "    source   : ${SRC}"
 echo "    artifacts: ${OUT_DIR}"
 echo "    runtime  : node>=18 HTTP server, listens on PORT=${PORT}"
 echo
-echo "    environment (reused OSS_* + RECORDINGS_*):"
-printf '      %-24s %s\n' OSS_BUCKET            "$(val OSS_BUCKET)"
-printf '      %-24s %s\n' OSS_ENDPOINT          "$(val OSS_ENDPOINT)"
-printf '      %-24s %s\n' OSS_ACCESS_KEY_ID     "$(mask OSS_ACCESS_KEY_ID)"
-printf '      %-24s %s\n' OSS_ACCESS_KEY_SECRET "$(mask OSS_ACCESS_KEY_SECRET)"
-printf '      %-24s %s\n' RECORDINGS_PREFIX     "${PREFIX}"
-printf '      %-24s %s\n' RECORDINGS_MAX_DURATION "${MAXDUR}"
-printf '      %-24s %s\n' RECORDINGS_PRESIGN_TTL  "${TTL}"
-printf '      %-24s %s\n' PORT                  "${PORT}"
+echo "    environment (reused OSS_* + RECORDINGS_* + the object-mutation caps):"
+printf '      %-27s %s\n' OSS_BUCKET                "$(val OSS_BUCKET)"
+printf '      %-27s %s\n' OSS_ENDPOINT              "$(val OSS_ENDPOINT)"
+printf '      %-27s %s\n' OSS_ACCESS_KEY_ID         "$(mask OSS_ACCESS_KEY_ID)"
+printf '      %-27s %s\n' OSS_ACCESS_KEY_SECRET     "$(mask OSS_ACCESS_KEY_SECRET)"
+printf '      %-27s %s\n' RECORDINGS_PREFIX         "${PREFIX}"
+printf '      %-27s %s\n' RECORDINGS_MAX_DURATION   "${MAXDUR}"
+printf '      %-27s %s\n' RECORDINGS_PRESIGN_TTL    "${TTL}"
+printf '      %-27s %s\n' PORT                      "${PORT}"
+printf '      %-27s %s\n' PRESIGN_RATE_HOURLY       "${PRE_HOURLY}"
+printf '      %-27s %s\n' PRESIGN_RATE_DAILY        "${PRE_DAILY}"
+printf '      %-27s %s\n' PRESIGN_RATE_GLOBAL_HOURLY "${PRE_GLOBAL}"
 echo
 echo "    zip contents (function source, tests excluded):"
 zip_file_list | sed 's|^|      |'

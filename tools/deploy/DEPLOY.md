@@ -196,10 +196,13 @@ bash tools/deploy/deploy-recordings.sh            # 可选 --out DIR / --functio
 | `RECORDINGS_PREFIX` | `recordings` | 私有前缀；对象 key = `<prefix>/<anon>/<episode>_<entryId>_<recId>.<ext>` |
 | `RECORDINGS_MAX_DURATION` | `60` | 单段录音秒数上限，超出返回 413 |
 | `RECORDINGS_PRESIGN_TTL` | `300` | 签名 URL 有效期（秒） |
+| `PRESIGN_RATE_HOURLY` | `60` | 单个匿名 ID 每小时可签发多少份上传签名（`/presign-upload` 与 `/dispose` 共用这份预算）。`0` 关闭该窗口 |
+| `PRESIGN_RATE_DAILY` | `600` | 同上，按日窗口 |
+| `PRESIGN_RATE_GLOBAL_HOURLY` | `2000` | 单实例全局每小时上限，与匿名 ID 和 IP 无关——身份轮换也绕不过它 |
 | `PORT` | `8788` | 监听端口 |
-| `RECORDINGS_LOCAL_DIR` | 未设 | 设了即切 **local 后端**（文件落盘、无需云凭据），仅用于本地开发/e2e |
+| `RECORDINGS_LOCAL_DIR` | 未设 | 设了即切 **local 后端**（文件落盘、无需云凭据），仅用于本地开发/e2e。⚠️ 该路由无鉴权，所以本变量与任一 `OSS_*` 凭据同时存在时函数**启动即退出**（不是降级）；重发前先去控制台确认生产环境里没残留它 |
 
-> 启用评分还需 `DASHSCOPE_API_KEY` 与 `ASSESS_*` 一组变量，见 9.2。**`deploy-recordings.sh` 生成的 `.env` 清单目前只覆盖上表（录音上传/销毁），`ASSESS_*` 需直接在平台的函数环境里加**；不设 `DASHSCOPE_API_KEY` 即等价于评分关闭。
+> 启用评分还需 `DASHSCOPE_API_KEY` 与 `ASSESS_*` 一组变量，见 9.2。**`deploy-recordings.sh` 生成的 `.env` 清单目前只覆盖上表（录音上传/销毁及其限流额度），`ASSESS_*` 整组需直接在平台的函数环境里加，评分侧的 `ASSESS_RATE_*` 三项限流额度也在其中**；不设 `DASHSCOPE_API_KEY` 即等价于评分关闭。
 
 **部署与 bucket 配置**
 
